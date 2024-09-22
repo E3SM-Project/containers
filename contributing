@@ -1,0 +1,11 @@
+Contributions are welcome.
+
+Suppose you want to add a new container named "xyz" to this repository. We
+would like to encourage you to add a folder named xyz to build your container
+publicly. In the xyz folder, you can specify your container via a Dockerfile
+(or equivalent). To build the container, add a github actions workflow under
+.github/workflows named xyz.yaml. Name the image "containers-xyz", and have
+the workflow act only on the files added (folder xyz and workflow file). Also,
+tag and release the container with xyz-v1.2.3.
+
+See the example provided by the ghci container.
