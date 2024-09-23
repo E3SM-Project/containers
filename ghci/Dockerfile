@@ -55,7 +55,7 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "      - python" \
 &&   echo "      - py-pyyaml" \
 &&   echo "      - py-psutil" \
-&&   echo "      - py-netcdf" \
+&&   echo "      - py-netcdf4" \
 &&   echo "      - py-nanobind" \
 &&   echo " " \
 &&   echo "  specs:" \
