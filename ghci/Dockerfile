@@ -1,4 +1,6 @@
-FROM spack/ubuntu-jammy:0.22.1
+FROM spack/ubuntu-jammy:0.22.2
+
+LABEL org.opencontainers.image.description="E3SM ghci container is mainly for testing on github actions"
 
 ARG GCC_VERSION=11.4.0
 ARG MPICH_VERSION=3.4.3
@@ -45,6 +47,9 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "    - othpkgs:" \
 &&   echo "      - cmake" \
 &&   echo "      - cprnc" \
+&&   echo "      - yaml-cpp" \
+&&   echo "      - fmt" \
+&&   echo "      - spdlog" \
 &&   echo " " \
 &&   echo "  specs:" \
 &&   echo "    - szip" \
@@ -69,20 +74,22 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "") > /opt/spack-environment/spack.yaml
 
 # TODO: do these intervene with each other?
-# https://cache.spack.io/tag/v0.22.1/
-RUN spack mirror add v0.22.1 https://binaries.spack.io/v0.22.1
+# https://cache.spack.io/tag/v0.22.2/
+RUN spack mirror add v0.22.2 https://binaries.spack.io/v0.22.2
 RUN spack buildcache keys --install --trust
 # https://cache.spack.io/tag/v0.22.1/?stack=e4s
-RUN spack mirror add v0.22.1-e4s https://binaries.spack.io/v0.22.1/e4s
+RUN spack mirror add v0.22.2-e4s https://binaries.spack.io/v0.22.2/e4s
 RUN spack buildcache keys --install --trust
-# https://cache.spack.io/tag/v0.22.1/?stack=root#
-RUN spack mirror add v0.22.1-root https://binaries.spack.io/v0.22.1/root
+# https://cache.spack.io/tag/v0.22.2/?stack=root#
+RUN spack mirror add v0.22.2-root https://binaries.spack.io/v0.22.2/root
 RUN spack buildcache keys --install --trust
-# https://oaciss.uoregon.edu/e4s/inventory.html
-RUN spack mirror add E4S-24.0 https://cache.e4s.io/24.0
-RUN spack buildcache keys -it
-RUN spack mirror add E4S https://cache.e4s.io
-RUN spack buildcache keys -it
+
+# TODO: add e4s inventory when they support ubuntu 22.04+
+# # https://oaciss.uoregon.edu/e4s/inventory.html
+# RUN spack mirror add E4S-24.0 https://cache.e4s.io/24.0
+# RUN spack buildcache keys -it
+# RUN spack mirror add E4S https://cache.e4s.io
+# RUN spack buildcache keys -it
 
 RUN cd /opt/spack-environment && spack env activate . && spack install --fail-fast && spack gc -y
 
