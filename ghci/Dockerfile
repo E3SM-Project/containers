@@ -99,10 +99,6 @@ RUN cd /opt/spack-environment && \
 ENV INPUT_DATA_DIR=/projects/e3sm/inputdata
 RUN mkdir -p $INPUT_DATA_DIR
 
-RUN mkdir -p /projects/e3sm/inputdata/atm/cam/physprops/
-RUN wget https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/cam/physprops/p3_lookup_table_1.dat-v4.1.2
-RUN mv p3_lookup_table_1.dat-v4.1.2 /projects/e3sm/inputdata/atm/cam/physprops/
-
 ENV USER=ghciocitester
 
 RUN git config --global user.email "${USER}@${USER}.${USER}"
