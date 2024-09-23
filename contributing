@@ -6,6 +6,6 @@ publicly. In the xyz folder, you can specify your container via a Dockerfile
 (or equivalent). To build the container, add a github actions workflow under
 .github/workflows named xyz.yaml. Name the image "containers-xyz", and have
 the workflow act only on the files added (folder xyz and workflow file). Also,
-tag and release the container with xyz-v1.2.3.
+tag and release the container with xyz-1.2.3.
 
 See the example provided by the ghci container.

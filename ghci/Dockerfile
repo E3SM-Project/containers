@@ -1,6 +1,8 @@
 FROM spack/ubuntu-jammy:0.22.2
 
+LABEL org.opencontainers.image.source=https://github.com/E3SM-Project/containers
 LABEL org.opencontainers.image.description="E3SM ghci container is mainly for testing on github actions"
+LABEL org.opencontainers.image.licenses=BSD-3-Clause
 
 ARG GCC_VERSION=11.4.0
 ARG MPICH_VERSION=3.4.3
@@ -50,6 +52,11 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "      - yaml-cpp" \
 &&   echo "      - fmt" \
 &&   echo "      - spdlog" \
+&&   echo "      - python" \
+&&   echo "      - py-pyyaml" \
+&&   echo "      - py-psutil" \
+&&   echo "      - py-netcdf" \
+&&   echo "      - py-nanobind" \
 &&   echo " " \
 &&   echo "  specs:" \
 &&   echo "    - szip" \
