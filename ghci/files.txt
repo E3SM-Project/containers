@@ -112,6 +112,7 @@ https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/maps/map_ne4np4_to_ne2
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/mu_r_table_vals.dat4
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/mu_r_table_vals.dat8
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/p3_lookup_table_1.dat-v4.1.1
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/cam/physprops/p3_lookup_table_1.dat-v4.1.2
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/revap_table_vals.dat4
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/revap_table_vals.dat8
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vm_table_vals.dat4
