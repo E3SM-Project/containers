@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.description="E3SM ghci container is mainly for te
 LABEL org.opencontainers.image.licenses=BSD-3-Clause
 
 ARG GCC_VERSION=11.4.0
-ARG MPICH_VERSION=3.4.3
+ARG MPICH_VERSION=4.2.1
 ARG SZIP_VERSION=2.1.1
 ARG HDF5_VERSION=1.12.3
 ARG NETCDFC_VERSION=4.9.2
@@ -31,7 +31,13 @@ RUN apt-get update && apt-get -y install \
     locales csh m4 libcurl4-openssl-dev \
     libz-dev gcc g++ gfortran liblapack-dev make git \
     git wget subversion libxml2-dev libxml2-utils libxml-libxml-perl \
-    libswitch-perl build-essential checkinstall zlib1g-dev libssl-dev python3-distutils
+    libswitch-perl build-essential checkinstall zlib1g-dev libssl-dev \ 
+    python3-distutils python-is-python3 python3-pip python3-full
+
+RUN python -m pip install netcdf4 pyyaml psutil pylint nanobind
+
+RUN python -m pip cache purge
+RUN apt-get -y autoremove
 
 # TODO: move to env file (spack.yaml)?
 RUN mkdir -p /opt/spack-environment \
@@ -52,11 +58,6 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "      - yaml-cpp" \
 &&   echo "      - fmt" \
 &&   echo "      - spdlog" \
-&&   echo "      - python" \
-&&   echo "      - py-pyyaml" \
-&&   echo "      - py-psutil" \
-&&   echo "      - py-netcdf4" \
-&&   echo "      - py-nanobind" \
 &&   echo " " \
 &&   echo "  specs:" \
 &&   echo "    - szip" \

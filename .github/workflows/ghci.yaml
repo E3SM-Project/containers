@@ -54,6 +54,8 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}-ghci
+          labels: |
+            org.opencontainers.image.description=E3SM ghci container is mainly for testing on github actions
       -
         name: QEMU
         uses: docker/setup-qemu-action@v3
