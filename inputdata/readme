@@ -1,0 +1,5 @@
+The inputdata container is mainly for storing inputdata files needed
+
+Design notes
+- files.txt contains all files needed for all tests
+- files-standalone.txt contains only files needed for eamxx-standalone
