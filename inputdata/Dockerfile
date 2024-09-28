@@ -2,7 +2,7 @@ FROM spack/ubuntu-jammy:0.22.2
 
 ARG DATA_FILE="files.txt"
 
-ENV DATA_FILE=${DATA_FILE}
+ENV DATA_FILE="${DATA_FILE}"
 
 RUN apt-get update
 RUN apt-get -y upgrade
@@ -44,7 +44,7 @@ RUN mkdir -p /app/ \
 
 RUN chmod +x /app/download.sh
 
-COPY ${DATA_FILE} /app/files.txt
+COPY "${DATA_FILE}" /app/files.txt
 RUN /app/download.sh
 
 ENTRYPOINT ["/bin/bash", "--rcfile", "/etc/profile", "-l"]
