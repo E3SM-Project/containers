@@ -66,4 +66,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            DATA_FILE="${{ matrix.data }}.txt"
+            DATA_FILE=${{ matrix.data }}.txt
