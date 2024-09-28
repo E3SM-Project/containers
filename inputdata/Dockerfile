@@ -11,8 +11,6 @@ RUN apt-get -y install software-properties-common
 RUN add-apt-repository universe
 RUN apt-get update && apt-get -y install wget
 
-RUN python -m pip install netcdf4 pyyaml psutil pylint nanobind
-
 RUN apt-get -y autoremove
 
 ENV INPUT_DATA_DIR=/projects/e3sm/inputdata
