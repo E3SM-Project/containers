@@ -1,0 +1,7 @@
+The standalone-ghci container is mainly for testing eamxx standalone on github actions
+
+Design notes
+- the container is based on ghcr.io/e3sm-project/containers-inputdata-files-standalone:main
+- the container relies on binary cache to accelerate builds
+- the container is based on gcc 11, native to ubuntu 22.04 (jammy)
+- the container has mpich 3.4.3, to ensure compatibility with craympich
