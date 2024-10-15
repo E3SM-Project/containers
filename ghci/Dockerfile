@@ -1,8 +1,4 @@
-FROM spack/ubuntu-jammy:0.22.2
-
-LABEL org.opencontainers.image.source=https://github.com/E3SM-Project/containers
-LABEL org.opencontainers.image.description="E3SM ghci container is mainly for testing on github actions"
-LABEL org.opencontainers.image.licenses=BSD-3-Clause
+FROM ghcr.io/e3sm-project/containers-inputdata-files:main
 
 ARG GCC_VERSION=11.4.0
 ARG MPICH_VERSION=4.2.1
@@ -104,9 +100,6 @@ RUN cd /opt/spack-environment && spack env activate . && spack install --fail-fa
 RUN cd /opt/spack-environment && \
     spack env activate --sh -d . >> /etc/profile.d/z10_spack_environment.sh
 
-ENV INPUT_DATA_DIR=/projects/e3sm/inputdata
-RUN mkdir -p $INPUT_DATA_DIR
-
 ENV USER=ghciocitester
 
 RUN git config --global user.email "${USER}@${USER}.${USER}"
@@ -117,25 +110,6 @@ ENV TZ=America/Los_Angeles
 
 ENV LANGUAGE=en_US:en \
     LANG=en_US.UTF-8
-
-# TODO: move this to a separate image (i.e., above is "base", below is "full")?
-RUN mkdir -p /app/ \
-&& (echo "" \
-&&  echo "cat /app/files.txt | while read -r line; do" \
-&&  echo "    file_url=\$line" \
-&&  echo "    file_loc=\${line//https\:\/\/web\.lcrc\.anl\.gov\/public\/e3sm\/inputdata/${INPUT_DATA_DIR}}" \
-&&  echo "    mkdir -p \$( dirname -- \"\$file_loc\")" \
-&&  echo "    touch \"\$file_loc\"" \
-&&  echo "    echo \"downloading from \$file_url\"" \
-&&  echo "    echo \"downloading to \$file_loc\"" \
-&&  echo "    wget -q -O \"\$file_loc\" \"\$file_url\"" \
-&&  echo "done" \
-&&  echo "") > /app/download.sh
-
-RUN chmod +x /app/download.sh
-
-COPY files.txt /app/files.txt
-RUN /app/download.sh
 
 # TODO: maybe add a test here or in the workflow?
 
