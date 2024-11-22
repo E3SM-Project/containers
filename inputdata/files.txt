@@ -83,8 +83,8 @@ https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/spa_file_unified_
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/spa_file_unified_and_complete_ne4pg2_20231222.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/spa_init_ne2np4.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/vertical_coordinates_L72_20220927.nc
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/initscreami_unit_tests_ne2np4L128_20220822.nc
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/initscreami_unit_tests_ne2np4L72_20220822.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/screami_unit_tests_ne2np4L128_20220822.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/init/screami_unit_tests_ne2np4L72_20220822.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/mam4xx/emissions/ne2np4/surface/DMSflux.2010.ne2np4_conserv.POPmonthlyClimFromACES4BGC_c20240726.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/mam4xx/emissions/ne2np4/surface/cmip6_mam4_bc_a4_surf_ne2np4_2010_clim_c20240726.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/mam4xx/emissions/ne2np4/surface/cmip6_mam4_num_a1_surf_ne2np4_2010_clim_c20240726.nc
