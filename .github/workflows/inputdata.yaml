@@ -1,6 +1,8 @@
 name: inputdata
 
 on:
+  merge_group:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     paths:
