@@ -1,4 +1,4 @@
-name: e3sm-diags
+name: e3sm-diags-test-data
 
 on:
   merge_group:
@@ -6,15 +6,15 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'e3sm-diags/**'
-      - '.github/workflows/e3sm-diags.yaml'
+      - 'e3sm-diags-test-data/**'
+      - '.github/workflows/e3sm-diags-test-data.yaml'
   push:
     branches: [ main ]
     paths:
-      - 'e3sm-diags/**'
-      - '.github/workflows/e3sm-diags.yaml'
+      - 'e3sm-diags-test-data/**'
+      - '.github/workflows/e3sm-diags-test-data.yaml'
     tags:
-      - 'e3sm-diags-*'
+      - 'e3sm-diags-test-data-*'
 
 jobs:
   ocis:
@@ -47,7 +47,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository }}-e3sm-diags
+            ghcr.io/${{ github.repository }}-e3sm-diags-test-data
       -
         name: QEMU
         uses: docker/setup-qemu-action@v3
@@ -58,8 +58,8 @@ jobs:
         name: Push
         uses: docker/build-push-action@v6
         with:
-          context: e3sm-diags/
-          file: e3sm-diags/Dockerfile
+          context: e3sm-diags-test-data/
+          file: e3sm-diags-test-data/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
