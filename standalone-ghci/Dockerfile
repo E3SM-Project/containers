@@ -9,6 +9,34 @@ ARG NETCDFCXX_VERSION=4.2
 ARG NETCDFFORTRAN_VERSION=4.6.1
 ARG PNETCDF_VERSION=1.12.3
 
+
+ENV GCC_VERSION=${GCC_VERSION}
+ENV MPICH_VERSION=${MPICH_VERSION}
+ENV SZIP_VERSION=${SZIP_VERSION}
+ENV HDF5_VERSION=${HDF5_VERSION}
+ENV NETCDFC_VERSION=${NETCDFC_VERSION}
+ENV NETCDFCXX_VERSION=${NETCDFCXX_VERSION}
+ENV NETCDFFORTRAN_VERSION=${NETCDFFORTRAN_VERSION}
+ENV PNETCDF_VERSION=${PNETCDF_VERSION}
+
+RUN apt-get update
+RUN apt-get -y upgrade
+RUN apt-get -y remove cmake
+RUN apt-get -y install software-properties-common
+RUN add-apt-repository universe
+RUN apt-get update && apt-get -y install \
+    locales csh m4 libcurl4-openssl-dev \
+    libz-dev gcc g++ gfortran liblapack-dev make git \
+    git wget subversion libxml2-dev libxml2-utils libxml-libxml-perl \
+    libswitch-perl build-essential checkinstall zlib1g-dev libssl-dev \ 
+    python3-distutils python-is-python3 python3-pip python3-full
+
+RUN python -m pip install netcdf4 pyyaml psutil pylint nanobind
+
+RUN python -m pip cache purge
+RUN apt-get -y autoremove
+
+# TODO: move to env file (spack.yaml)?
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         echo "Architecture is x86_64"; \
@@ -19,60 +47,51 @@ RUN ARCH=$(uname -m) && \
     else \
         echo "Unknown architecture"; \
         export ARCH_SPECIFIC_VAR="value_for_unknown"; \
-    fi && \
-    apt-get update && apt-get -y upgrade && apt-get -y remove cmake && \
-    apt-get -y install software-properties-common && \
-    add-apt-repository universe && \
-    apt-get update && apt-get -y install \
-    locales csh m4 libcurl4-openssl-dev \
-    libz-dev gcc g++ gfortran liblapack-dev make git \
-    git wget subversion libxml2-dev libxml2-utils libxml-libxml-perl \
-    libswitch-perl build-essential checkinstall zlib1g-dev libssl-dev \ 
-    python3-distutils python-is-python3 python3-pip python3-full && \
-    python -m pip install netcdf4 pyyaml psutil pylint nanobind && \
-    python -m pip cache purge && \
-    apt-get -y autoremove && \
-    mkdir -p /opt/spack-environment && \
-    (echo "spack:" \
-    && echo " " \
-    && echo "  definitions:" \
-    && echo "    - compilers: [gcc@${GCC_VERSION}]" \
-    && echo "    - target: [${ARCH_SPECIFIC_VAR}]" \
-    && echo "    - mpis: [mpich@${MPICH_VERSION}]" \
-    && echo "    - mpipkgs:"  \
-    && echo "      - hdf5@${HDF5_VERSION}" \
-    && echo "      - netcdf-c@${NETCDFC_VERSION}" \
-    && echo "      - netcdf-cxx@${NETCDFCXX_VERSION}" \
-    && echo "      - netcdf-fortran@${NETCDFFORTRAN_VERSION}" \
-    && echo "      - parallel-netcdf@${PNETCDF_VERSION}" \
-    && echo "    - othpkgs:" \
-    && echo "      - cmake" \
-    && echo "      - cprnc" \
-    && echo "      - yaml-cpp" \
-    && echo "      - fmt" \
-    && echo "      - spdlog" \
-    && echo " " \
-    && echo "  specs:" \
-    && echo "    - szip" \
-    && echo "    - matrix:" \
-    && echo "      - [\$mpis]" \
-    && echo "      - [\$%compilers]" \
-    && echo "    - matrix:" \
-    && echo "      - [\$othpkgs]" \
-    && echo "      - [\$%compilers]" \
-    && echo "    - matrix:" \
-    && echo "      - [\$mpipkgs]" \
-    && echo "      - [\$^mpis]" \
-    && echo "      - [\$%compilers]" \
-    && echo " " \
-    && echo "  concretizer:" \
-    && echo "    unify: true" \
-    && echo " " \
-    && echo "  config:" \
-    && echo "    install_tree: /opt/software" \
-    && echo " " \
-    && echo "  view: /usr/local/packages" \
-    && echo "") > /opt/spack-environment/spack.yaml
+    fi \
+&& mkdir -p /opt/spack-environment \
+&&  (echo "spack:" \
+&&   echo " " \
+&&   echo "  definitions:" \
+&&   echo "    - compilers: [gcc@${GCC_VERSION}]" \
+&&   echo "    - target: [${ARCH_SPECIFIC_VAR}]" \
+&&   echo "    - mpis: [mpich@${MPICH_VERSION}]" \
+&&   echo "    - mpipkgs:"  \
+&&   echo "      - hdf5@${HDF5_VERSION}" \
+&&   echo "      - netcdf-c@${NETCDFC_VERSION}" \
+&&   echo "      - netcdf-cxx@${NETCDFCXX_VERSION}" \
+&&   echo "      - netcdf-fortran@${NETCDFFORTRAN_VERSION}" \
+&&   echo "      - parallel-netcdf@${PNETCDF_VERSION}" \
+&&   echo "    - othpkgs:" \
+&&   echo "      - cmake" \
+&&   echo "      - cprnc" \
+&&   echo "      - yaml-cpp" \
+&&   echo "      - fmt" \
+&&   echo "      - spdlog" \
+&&   echo " " \
+&&   echo "  specs:" \
+&&   echo "    - szip" \
+&&   echo "    - matrix:" \
+&&   echo "      - [\$mpis]" \
+&&   echo "      - [\$%compilers]" \
+&&   echo "    - matrix:" \
+&&   echo "      - [\$othpkgs]" \
+&&   echo "      - [\$%compilers]" \
+&&   echo "    - matrix:" \
+&&   echo "      - [\$mpipkgs]" \
+&&   echo "      - [\$^mpis]" \
+&&   echo "      - [\$%compilers]" \
+&&   echo " " \
+&&   echo "  concretizer:" \
+&&   echo "    unify: true" \
+&&   echo " " \
+&&   echo "  config:" \
+&&   echo "    install_tree: /opt/software" \
+&&   echo " " \
+&&   echo "  view: /usr/local/packages" \
+&&   echo "") > /opt/spack-environment/spack.yaml
+
+# display the spack.yaml file
+RUN cat /opt/spack-environment/spack.yaml
 
 # TODO: do these intervene with each other?
 # https://cache.spack.io/tag/v0.23.0/
