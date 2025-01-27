@@ -9,6 +9,7 @@ ARG NETCDFCXX_VERSION=4.2
 ARG NETCDFFORTRAN_VERSION=4.6.1
 ARG PNETCDF_VERSION=1.12.3
 
+
 ENV GCC_VERSION=${GCC_VERSION}
 ENV MPICH_VERSION=${MPICH_VERSION}
 ENV SZIP_VERSION=${SZIP_VERSION}
@@ -36,11 +37,23 @@ RUN python -m pip cache purge
 RUN apt-get -y autoremove
 
 # TODO: move to env file (spack.yaml)?
-RUN mkdir -p /opt/spack-environment \
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        echo "Architecture is x86_64"; \
+        export ARCH_SPECIFIC_VAR="x86_64_v3"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        echo "Architecture is aarch64"; \
+        export ARCH_SPECIFIC_VAR="aarch64"; \
+    else \
+        echo "Unknown architecture"; \
+        export ARCH_SPECIFIC_VAR="value_for_unknown"; \
+    fi \
+&& mkdir -p /opt/spack-environment \
 &&  (echo "spack:" \
 &&   echo " " \
 &&   echo "  definitions:" \
 &&   echo "    - compilers: [gcc@${GCC_VERSION}]" \
+&&   echo "    - target: [${ARCH_SPECIFIC_VAR}]" \
 &&   echo "    - mpis: [mpich@${MPICH_VERSION}]" \
 &&   echo "    - mpipkgs:"  \
 &&   echo "      - hdf5@${HDF5_VERSION}" \
@@ -76,6 +89,9 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo " " \
 &&   echo "  view: /usr/local/packages" \
 &&   echo "") > /opt/spack-environment/spack.yaml
+
+# display the spack.yaml file
+RUN cat /opt/spack-environment/spack.yaml
 
 # TODO: do these intervene with each other?
 # https://cache.spack.io/tag/v0.23.0/
