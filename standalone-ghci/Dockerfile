@@ -12,13 +12,13 @@ ARG PNETCDF_VERSION=1.12.3
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         echo "Architecture is x86_64"; \
-        ENV ARCH_SPECIFIC_VAR="x86_64_v3"; \
+        export ARCH_SPECIFIC_VAR="x86_64_v3"; \
     elif [ "$ARCH" = "aarch64" ]; then \
         echo "Architecture is aarch64"; \
-        ENV ARCH_SPECIFIC_VAR="aarch64"; \
+        export ARCH_SPECIFIC_VAR="aarch64"; \
     else \
         echo "Unknown architecture"; \
-        ENV ARCH_SPECIFIC_VAR="value_for_unknown"; \
+        export ARCH_SPECIFIC_VAR="value_for_unknown"; \
     fi
 
 ENV GCC_VERSION=${GCC_VERSION}
