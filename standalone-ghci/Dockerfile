@@ -90,6 +90,10 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "  view: /usr/local/packages" \
 &&   echo "") > /opt/spack-environment/spack.yaml
 
+# display the spack.yaml file
+
+RUN cat /opt/spack-environment/spack.yaml
+
 # TODO: do these intervene with each other?
 # https://cache.spack.io/tag/v0.23.0/
 RUN spack mirror add v0.23.0 https://binaries.spack.io/v0.23.0
