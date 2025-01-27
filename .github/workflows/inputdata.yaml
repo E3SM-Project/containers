@@ -16,7 +16,7 @@ on:
 
 jobs:
   ocis:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       packages: write
@@ -26,7 +26,10 @@ jobs:
       matrix:
         data:
           - files
-
+          - files-standalone
+        os:
+          - ubuntu-22.04
+          - ubuntu-22.04-arm
     steps:
       - 
         name: Checkout
