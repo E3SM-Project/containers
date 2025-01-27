@@ -1,13 +1,13 @@
 FROM ghcr.io/e3sm-project/containers-inputdata-files:main
 
 ARG GCC_VERSION=11.4.0
-ARG MPICH_VERSION=4.2.1
+ARG MPICH_VERSION=4.2.3
 ARG SZIP_VERSION=2.1.1
 ARG HDF5_VERSION=1.12.3
 ARG NETCDFC_VERSION=4.9.2
 ARG NETCDFCXX_VERSION=4.2
 ARG NETCDFFORTRAN_VERSION=4.6.1
-ARG PNETCDF_VERSION=1.12.1
+ARG PNETCDF_VERSION=1.12.3
 
 ENV GCC_VERSION=${GCC_VERSION}
 ENV MPICH_VERSION=${MPICH_VERSION}
@@ -78,14 +78,14 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "") > /opt/spack-environment/spack.yaml
 
 # TODO: do these intervene with each other?
-# https://cache.spack.io/tag/v0.22.2/
-RUN spack mirror add v0.22.2 https://binaries.spack.io/v0.22.2
+# https://cache.spack.io/tag/v0.23.0/
+RUN spack mirror add v0.23.0 https://binaries.spack.io/v0.23.0
 RUN spack buildcache keys --install --trust
-# https://cache.spack.io/tag/v0.22.1/?stack=e4s
-RUN spack mirror add v0.22.2-e4s https://binaries.spack.io/v0.22.2/e4s
+# https://cache.spack.io/tag/v0.23.0/?stack=e4s
+RUN spack mirror add v0.23.0-e4s https://binaries.spack.io/v0.23.0/e4s
 RUN spack buildcache keys --install --trust
-# https://cache.spack.io/tag/v0.22.2/?stack=root#
-RUN spack mirror add v0.22.2-root https://binaries.spack.io/v0.22.2/root
+# https://cache.spack.io/tag/v0.23.0/?stack=root#
+RUN spack mirror add v0.23.0-root https://binaries.spack.io/v0.23.0/root
 RUN spack buildcache keys --install --trust
 
 # TODO: add e4s inventory when they support ubuntu 22.04+
