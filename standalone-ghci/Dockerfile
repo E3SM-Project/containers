@@ -53,7 +53,6 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo "      - cprnc" \
 &&   echo "      - yaml-cpp" \
 &&   echo "      - fmt" \
-&&   echo "      - openssh" \
 &&   echo "      - spdlog" \
 &&   echo " " \
 &&   echo "  specs:" \
@@ -105,10 +104,7 @@ ENV USER=ghciocitester
 
 RUN git config --global user.email "${USER}@${USER}.${USER}"
 RUN git config --global user.name "${USER}"
-
-RUN ssh-keygen -t rsa -b 4096 -f /root/.ssh/id_rsa -N ""
-RUN cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys
-RUN chmod 600 /root/.ssh/authorized_keys
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Los_Angeles
