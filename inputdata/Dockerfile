@@ -1,4 +1,4 @@
-FROM spack/ubuntu-jammy:0.22.2
+FROM spack/ubuntu-jammy:0.23.0
 
 ARG DATA_FILE=files.txt
 
