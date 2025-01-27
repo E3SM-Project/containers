@@ -53,7 +53,7 @@ RUN mkdir -p /opt/spack-environment \
 &&   echo " " \
 &&   echo "  definitions:" \
 &&   echo "    - compilers: [gcc@${GCC_VERSION}]" \
-&&   echo "    - targets: [${ARCH_SPECIFIC_VAR}]" \
+&&   echo "    - target: [@${ARCH_SPECIFIC_VAR}]" \
 &&   echo "    - mpis: [mpich@${MPICH_VERSION}]" \
 &&   echo "    - mpipkgs:"  \
 &&   echo "      - hdf5@${HDF5_VERSION}" \
