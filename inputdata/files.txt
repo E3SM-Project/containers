@@ -160,3 +160,15 @@ https://web.lcrc.anl.gov/public/e3sm/inputdata/rof/mosart/US_reservoir_8th_NLDAS
 https://web.lcrc.anl.gov/public/e3sm/inputdata/share/domains/domain.lnd.ne4pg2_oQU480.200527.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/share/domains/domain.ocn.oQU480.151209.nc
 https://web.lcrc.anl.gov/public/e3sm/inputdata/share/meshes/rof/SCRIPgrid_2x2_nomask_c210211.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/cam/ocnfrac/domain.camocn.0.9x1.25_gx1v6_090403.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/cam/sst/sst_HadOIBl_bc_0.9x1.25_clim_c040926.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/datm7/NYF/nyf.giss.T62.051007.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/datm7/NYF/nyf.gxgxs.T62.051007.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/datm7/NYF/nyf.ncep.T62.050923.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/datm7/CORE2/COREv2.correction_factors.T62.121007.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/datm7/domain.T62.050609.nc
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vn_table_vals_v2.dat8
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vm_table_vals_v2.dat8
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/revap_table_vals_v2.dat8
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/mu_r_table_vals_v2.dat8
+https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/maps/map_ne4pg2_to_ne2pg2_c20240902.nc
