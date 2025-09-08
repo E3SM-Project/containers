@@ -53,8 +53,3 @@ https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vm_table_vals.d
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vm_table_vals.dat8
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vn_table_vals.dat4
 https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vn_table_vals.dat8
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vn_table_vals_v2.dat8
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/vm_table_vals_v2.dat8
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/revap_table_vals_v2.dat8
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/tables/mu_r_table_vals_v2.dat8
-https://web.lcrc.anl.gov/public/e3sm/inputdata/atm/scream/maps/map_ne4pg2_to_ne2pg2_c20240902.nc
