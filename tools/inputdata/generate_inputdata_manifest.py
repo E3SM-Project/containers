@@ -12,12 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 from tools.inputdata.lib.cime_manifest import parse_input_data_lists, run_create_test
-from tools.inputdata.lib.url_normalize import (
-    filter_candidate_path,
-    is_public_inputdata_url,
-    normalize_to_din_relative,
-    to_public_inputdata_url,
-)
+from tools.inputdata.lib.inputdata_validation import InputDataValidationResult, validate_inputdata_reference
+from tools.inputdata.lib.url_normalize import filter_candidate_path, is_public_inputdata_url
 from tools.inputdata.lib.workflow_parser import TestRecord, build_state_payload, parse_workflows
 
 
@@ -29,6 +25,10 @@ class ProvenanceRecord:
     component_list_file: str
     manifest: str
     discovery_method: str
+    relative_path: str
+    validation_status: str
+    checked_urls: tuple[str, str]
+    validation_message: str = ""
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,6 +69,11 @@ def parse_args() -> argparse.Namespace:
         "--provenance-out",
         required=True,
         help="File path for the generated provenance JSON.",
+    )
+    parser.add_argument(
+        "--missing-files-out",
+        required=True,
+        help="File path for a list of input files that could not be found on either server.",
     )
     parser.add_argument(
         "--strict",
@@ -227,6 +232,7 @@ def _standalone_from_workflow_records(
     din_loc_root: Path,
     output_root: Path,
     warnings: list[str],
+    missing_provenance: list[dict[str, object]],
 ) -> tuple[list[str], dict[str, list[ProvenanceRecord]]]:
     urls: set[str] = set()
     provenance: dict[str, list[ProvenanceRecord]] = {}
@@ -245,44 +251,68 @@ def _standalone_from_workflow_records(
         return [], {}
 
     for source_path, raw_path in all_candidates:
-        url = _normalize_and_collect(raw_path, din_loc_root)
-        if not url:
+        validation = _normalize_and_validate(raw_path, din_loc_root)
+        if not validation:
             continue
-        urls.add(url)
         method = "standalone-static"
         if source_path.startswith(output_root.as_posix()) or "/ctest-build/" in source_path:
             method = "standalone-config"
+
         for record in standalone_tests:
-            provenance.setdefault(url, []).append(
-                ProvenanceRecord(
-                    workflow=record.workflow,
-                    test=record.name,
-                    case_dir="",
-                    component_list_file=source_path,
-                    manifest="files-standalone.txt",
-                    discovery_method=method,
-                )
+            provenance_record = ProvenanceRecord(
+                workflow=record.workflow,
+                test=record.name,
+                case_dir="",
+                component_list_file=source_path,
+                manifest="files-standalone.txt",
+                discovery_method=method,
+                relative_path=validation.relative_path,
+                validation_status=validation.status,
+                checked_urls=validation.checked_urls,
+                validation_message=validation.message,
             )
+            if validation.status == "missing":
+                missing_provenance.append(
+                    {
+                        "workflow": provenance_record.workflow,
+                        "test": provenance_record.test,
+                        "case_dir": provenance_record.case_dir,
+                        "component_list_file": provenance_record.component_list_file,
+                        "manifest": provenance_record.manifest,
+                        "discovery_method": provenance_record.discovery_method,
+                        "relative_path": provenance_record.relative_path,
+                        "checked_urls": list(provenance_record.checked_urls),
+                        "validation_status": provenance_record.validation_status,
+                        "validation_message": provenance_record.validation_message,
+                    }
+                )
+                continue
+
+            url = validation.resolved_url or validation.checked_urls[0]
+            urls.add(url)
+            provenance.setdefault(url, []).append(provenance_record)
 
     return sorted(urls), provenance
 
 
-def _normalize_and_collect(
+def _normalize_and_validate(
     raw_value: str,
     din_loc_root: Path,
-) -> Optional[str]:
+) -> Optional[InputDataValidationResult]:
     if not filter_candidate_path(raw_value):
         return None
 
-    relative = normalize_to_din_relative(raw_value, din_loc_root)
-    if not relative:
+    validation_result = validate_inputdata_reference(raw_value, din_loc_root)
+    if not validation_result:
         return None
 
-    url = to_public_inputdata_url(relative)
-    if not is_public_inputdata_url(url):
+    if not validation_result.resolved_url:
+        return validation_result
+
+    if not is_public_inputdata_url(validation_result.resolved_url):
         return None
 
-    return url
+    return validation_result
 
 
 def _provenance_payload(data: dict[str, list[ProvenanceRecord]]) -> dict[str, list[dict]]:
@@ -297,6 +327,8 @@ def _provenance_payload(data: dict[str, list[ProvenanceRecord]]) -> dict[str, li
                 rec.case_dir,
                 rec.manifest,
                 rec.discovery_method,
+                rec.validation_status,
+                rec.relative_path,
             ),
         )
         payload[url] = [
@@ -307,6 +339,10 @@ def _provenance_payload(data: dict[str, list[ProvenanceRecord]]) -> dict[str, li
                 "component_list_file": rec.component_list_file,
                 "manifest": rec.manifest,
                 "discovery_method": rec.discovery_method,
+                "relative_path": rec.relative_path,
+                "validation_status": rec.validation_status,
+                "checked_urls": list(rec.checked_urls),
+                "validation_message": rec.validation_message,
             }
             for rec in entries
         ]
@@ -334,6 +370,7 @@ def main() -> int:
     state = build_state_payload(parse_result)
     full_urls: set[str] = set()
     full_provenance: dict[str, list[ProvenanceRecord]] = {}
+    missing_provenance: list[dict[str, object]] = []
 
     success_count = 0
     failure_count = 0
@@ -367,20 +404,43 @@ def main() -> int:
             case_dir = Path(case_dir_value)
             entries = parse_input_data_lists(case_dir)
             for entry in entries:
-                url = _normalize_and_collect(entry.raw_value, din_loc_root)
-                if not url:
+                validation = _normalize_and_validate(entry.raw_value, din_loc_root)
+                if not validation:
                     continue
-                full_urls.add(url)
-                full_provenance.setdefault(url, []).append(
-                    ProvenanceRecord(
-                        workflow=test_record.workflow,
-                        test=test_record.name,
-                        case_dir=test_record.name,
-                        component_list_file=entry.component_list_file,
-                        manifest="files.txt",
-                        discovery_method="cime-buildconf",
-                    )
+
+                provenance_record = ProvenanceRecord(
+                    workflow=test_record.workflow,
+                    test=test_record.name,
+                    case_dir=test_record.name,
+                    component_list_file=entry.component_list_file,
+                    manifest="files.txt",
+                    discovery_method="cime-buildconf",
+                    relative_path=validation.relative_path,
+                    validation_status=validation.status,
+                    checked_urls=validation.checked_urls,
+                    validation_message=validation.message,
                 )
+
+                if validation.status == "missing":
+                    missing_provenance.append(
+                        {
+                            "workflow": provenance_record.workflow,
+                            "test": provenance_record.test,
+                            "case_dir": provenance_record.case_dir,
+                            "component_list_file": provenance_record.component_list_file,
+                            "manifest": provenance_record.manifest,
+                            "discovery_method": provenance_record.discovery_method,
+                            "relative_path": provenance_record.relative_path,
+                            "checked_urls": list(provenance_record.checked_urls),
+                            "validation_status": provenance_record.validation_status,
+                            "validation_message": provenance_record.validation_message,
+                        }
+                    )
+                    continue
+
+                url = validation.resolved_url or validation.checked_urls[0]
+                full_urls.add(url)
+                full_provenance.setdefault(url, []).append(provenance_record)
 
     if success_count == 0:
         print("ERROR: CIME case generation failed for all tests", file=sys.stderr)
@@ -397,6 +457,7 @@ def main() -> int:
         din_loc_root=din_loc_root,
         output_root=output_root,
         warnings=standalone_warnings,
+        missing_provenance=missing_provenance,
     )
 
     combined_provenance = dict(full_provenance)
@@ -406,12 +467,33 @@ def main() -> int:
     files_out = Path(args.files_out)
     standalone_files_out = Path(args.standalone_files_out)
     provenance_out = Path(args.provenance_out)
+    missing_files_out = Path(args.missing_files_out)
     state_out = Path(args.state_out)
+
+    missing_relative_paths = sorted(
+        {entry["relative_path"] for entry in missing_provenance}
+    )
+
+    provenance_payload = _provenance_payload(combined_provenance)
+    if missing_provenance:
+        provenance_payload["missing"] = missing_provenance
 
     _write_manifest(sorted(full_urls), files_out)
     _write_manifest(sorted(standalone_urls), standalone_files_out)
-    _write_json(_provenance_payload(combined_provenance), provenance_out)
+    _write_manifest(missing_relative_paths, missing_files_out)
+    _write_json(provenance_payload, provenance_out)
     _write_json(state, state_out)
+
+    for entry in sorted(missing_provenance, key=lambda e: e["relative_path"]):
+        print(
+            f"WARNING: missing inputdata "
+            f"path={entry['relative_path']} "
+            f"checked={entry['checked_urls']}",
+            file=sys.stderr,
+        )
+    if missing_provenance and args.strict:
+        print("ERROR: strict mode enabled and missing inputdata entries were found", file=sys.stderr)
+        return 8
 
     if parse_result.warnings:
         for warning in parse_result.warnings:
@@ -434,7 +516,8 @@ def main() -> int:
         f"full_failed={failure_count} "
         f"full_urls={len(full_urls)} "
         f"standalone_refs={len(parse_result.standalone_tests)} "
-        f"standalone_urls={len(standalone_urls)}"
+        f"standalone_urls={len(standalone_urls)} "
+        f"missing={len(missing_relative_paths)}"
     )
     return 0
 
