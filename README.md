@@ -75,10 +75,11 @@ All workflows live in `.github/workflows`.
 - Behavior:
   - Checks out this repository and `E3SM-Project/E3SM` at `master`.
   - Runs `python3 -m tools.inputdata.generate_inputdata_manifest`.
-  - Compares managed files:
+  - Opens a PR only when these payload-defining files change:
     - `inputdata/files.txt`
     - `inputdata/files-standalone.txt`
     - `inputdata/files-missing.txt`
+  - If a PR is opened, it also includes related metadata files:
     - `inputdata/e3sm-workflow-state.json`
     - `inputdata/provenance.json`
   - If no changes: exits without opening a PR.

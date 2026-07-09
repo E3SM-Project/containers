@@ -6,13 +6,18 @@ import json
 import subprocess
 from pathlib import Path
 
-MANAGED_FILES = [
+TRIGGER_FILES = [
     "inputdata/files.txt",
     "inputdata/files-standalone.txt",
     "inputdata/files-missing.txt",
+]
+
+ADDITIONAL_PR_FILES = [
     "inputdata/e3sm-workflow-state.json",
     "inputdata/provenance.json",
 ]
+
+PR_FILES = [*TRIGGER_FILES, *ADDITIONAL_PR_FILES]
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,9 +37,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _git_numstat(managed_files: list[str]) -> str:
+def _git_numstat(paths: list[str]) -> str:
     output = subprocess.check_output(
-        ["git", "diff", "--numstat", "--", *managed_files],
+        ["git", "diff", "--numstat", "--", *paths],
         text=True,
     )
     return output.strip()
@@ -59,8 +64,12 @@ def _render_body(state: dict, numstat: str) -> str:
     else:
         lines.append("- No managed file changes detected")
     lines.append("")
-    lines.append("Files in scope")
-    for path in MANAGED_FILES:
+    lines.append("PR trigger files")
+    for path in TRIGGER_FILES:
+        lines.append(f"- {path}")
+    lines.append("")
+    lines.append("Additional files included when a PR is opened")
+    for path in ADDITIONAL_PR_FILES:
         lines.append(f"- {path}")
     lines.append("")
     lines.append("Review guidance")
@@ -80,7 +89,7 @@ def main() -> int:
     with state_path.open("r", encoding="utf-8") as file:
         state = json.load(file)
 
-    numstat = _git_numstat(MANAGED_FILES)
+    numstat = _git_numstat(PR_FILES)
     body = _render_body(state, numstat)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

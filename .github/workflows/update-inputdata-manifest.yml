@@ -64,8 +64,6 @@ jobs:
             inputdata/files.txt
             inputdata/files-standalone.txt
             inputdata/files-missing.txt
-            inputdata/e3sm-workflow-state.json
-            inputdata/provenance.json
           )
 
           if git diff --quiet -- "${files[@]}"; then
