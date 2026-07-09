@@ -35,16 +35,51 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate inputdata manifests from E3SM workflows and CIME metadata"
     )
-    parser.add_argument("--e3sm-root", required=True)
-    parser.add_argument("--din-loc-root", required=True)
-    parser.add_argument("--test-root", required=True)
-    parser.add_argument("--output-root", required=True)
-    parser.add_argument("--state-out", required=True)
-    parser.add_argument("--files-out", required=True)
-    parser.add_argument("--standalone-files-out", required=True)
-    parser.add_argument("--provenance-out", required=True)
-    parser.add_argument("--strict", action="store_true")
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--e3sm-root",
+        required=True,
+        help="Path to the E3SM checkout that provides workflow files and CIME scripts.",
+    )
+    parser.add_argument(
+        "--test-root",
+        required=True,
+        help="Directory where CIME test cases are created during discovery.",
+    )
+    parser.add_argument(
+        "--output-root",
+        required=True,
+        help="Directory used for generated artifacts and temporary discovery output.",
+    )
+    parser.add_argument(
+        "--state-out",
+        required=True,
+        help="File path for the generated workflow and extraction state JSON.",
+    )
+    parser.add_argument(
+        "--files-out",
+        required=True,
+        help="File path for the generated full-model inputdata manifest.",
+    )
+    parser.add_argument(
+        "--standalone-files-out",
+        required=True,
+        help="File path for the generated standalone EAMxx inputdata manifest.",
+    )
+    parser.add_argument(
+        "--provenance-out",
+        required=True,
+        help="File path for the generated provenance JSON.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if workflow parsing or standalone discovery emits warnings.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print progress messages while discovering tests and input files.",
+    )
     return parser.parse_args()
 
 
@@ -282,9 +317,10 @@ def main() -> int:
     args = parse_args()
 
     e3sm_root = Path(args.e3sm_root).resolve()
-    din_loc_root = Path(args.din_loc_root).resolve()
     test_root = Path(args.test_root).resolve()
     output_root = Path(args.output_root).resolve()
+    din_loc_root = (Path.home() / "e3sm-inputdata-empty").resolve()
+    din_loc_root.mkdir(parents=True, exist_ok=True)
 
     if not e3sm_root.exists():
         print(f"ERROR: --e3sm-root does not exist: {e3sm_root}", file=sys.stderr)
