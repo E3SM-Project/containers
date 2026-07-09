@@ -49,6 +49,7 @@ The generator needs an environment with an E3SM checkout and a working CIME `cre
 ## Related modules
 
 - [generate_inputdata_manifest.py](generate_inputdata_manifest.py)
+- [build_pr_metadata.py](build_pr_metadata.py)
 - [lib/workflow_parser.py](lib/workflow_parser.py)
 - [lib/cime_manifest.py](lib/cime_manifest.py)
 - [lib/url_normalize.py](lib/url_normalize.py)
