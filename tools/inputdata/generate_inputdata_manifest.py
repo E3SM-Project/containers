@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -98,10 +99,99 @@ def _collect_standalone_candidate_paths(e3sm_root: Path) -> list[tuple[str, str]
     return sorted(candidates)
 
 
+def _run_standalone_config_mode(e3sm_root: Path, output_root: Path) -> tuple[bool, list[str]]:
+    """Best-effort config-only run for standalone EAMxx discovery."""
+    script = e3sm_root / "components" / "eamxx" / "scripts" / "test-all-eamxx"
+    if not script.exists():
+        return False, [f"Missing standalone script: {script}"]
+
+    output_root.mkdir(parents=True, exist_ok=True)
+    command = [str(script), "--help"]
+    try:
+        help_proc = subprocess.run(
+            command,
+            cwd=str(e3sm_root),
+            text=True,
+            capture_output=True,
+        )
+    except OSError as exc:
+        return False, [f"Failed to execute standalone script: {exc}"]
+
+    supported_flags = help_proc.stdout + "\n" + help_proc.stderr
+    run_command = [str(script)]
+    if "--configure-only" in supported_flags:
+        run_command.append("--configure-only")
+    elif "--config-only" in supported_flags:
+        run_command.append("--config-only")
+    elif "--dry-run" in supported_flags:
+        run_command.append("--dry-run")
+
+    if "--work-dir" in supported_flags:
+        run_command.extend(["--work-dir", str(output_root / "standalone-work")])
+
+    proc = subprocess.run(
+        run_command,
+        cwd=str(e3sm_root),
+        text=True,
+        capture_output=True,
+    )
+
+    messages: list[str] = []
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        messages.append("standalone config mode failed")
+        messages.extend(tail[-10:])
+        return False, messages
+
+    return True, messages
+
+
+def _scan_option_b_artifacts(e3sm_root: Path, output_root: Path) -> list[tuple[str, str]]:
+    candidates: set[tuple[str, str]] = set()
+    search_roots = [
+        output_root,
+        e3sm_root / "components" / "eamxx" / "ctest-build",
+        e3sm_root / "components" / "eamxx" / "build",
+    ]
+    path_pattern = re.compile(r"(?P<path>(?:\$\{?DIN_LOC_ROOT\}?/)?[A-Za-z0-9_./+-]+\.(?:nc|txt|xml|yaml|yml|json|dat|h5))")
+
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for file_path in sorted(root.rglob("*")):
+            if not file_path.is_file():
+                continue
+            if file_path.suffix.lower() not in {
+                ".txt",
+                ".cmake",
+                ".cfg",
+                ".yaml",
+                ".yml",
+                ".log",
+                ".sh",
+                ".json",
+            }:
+                continue
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for line in content.splitlines():
+                if "DIN_LOC_ROOT" not in line and "inputdata" not in line:
+                    continue
+                for match in path_pattern.finditer(line):
+                    raw = match.group("path")
+                    candidates.add((file_path.as_posix(), raw))
+
+    return sorted(candidates)
+
+
 def _standalone_from_workflow_records(
     e3sm_root: Path,
     records: list[TestRecord],
     din_loc_root: Path,
+    output_root: Path,
+    warnings: list[str],
 ) -> tuple[list[str], dict[str, list[ProvenanceRecord]]]:
     urls: set[str] = set()
     provenance: dict[str, list[ProvenanceRecord]] = {}
@@ -110,14 +200,23 @@ def _standalone_from_workflow_records(
     ]
 
     static_candidates = _collect_standalone_candidate_paths(e3sm_root)
-    if not static_candidates:
+    option_b_ok, option_b_messages = _run_standalone_config_mode(e3sm_root, output_root)
+    if not option_b_ok:
+        warnings.extend(option_b_messages)
+
+    option_b_candidates = _scan_option_b_artifacts(e3sm_root, output_root) if option_b_ok else []
+    all_candidates = static_candidates + option_b_candidates
+    if not all_candidates:
         return [], {}
 
-    for source_path, raw_path in static_candidates:
+    for source_path, raw_path in all_candidates:
         url = _normalize_and_collect(raw_path, din_loc_root)
         if not url:
             continue
         urls.add(url)
+        method = "standalone-static"
+        if source_path.startswith(output_root.as_posix()) or "/ctest-build/" in source_path:
+            method = "standalone-config"
         for record in standalone_tests:
             provenance.setdefault(url, []).append(
                 ProvenanceRecord(
@@ -126,7 +225,7 @@ def _standalone_from_workflow_records(
                     case_dir="",
                     component_list_file=source_path,
                     manifest="files-standalone.txt",
-                    discovery_method="standalone-static",
+                    discovery_method=method,
                 )
             )
 
@@ -253,10 +352,13 @@ def main() -> int:
         print("ERROR: resulting full-model manifest would be empty", file=sys.stderr)
         return 5
 
+    standalone_warnings: list[str] = []
     standalone_urls, standalone_provenance = _standalone_from_workflow_records(
         e3sm_root=e3sm_root,
         records=parse_result.standalone_tests,
         din_loc_root=din_loc_root,
+        output_root=output_root,
+        warnings=standalone_warnings,
     )
 
     combined_provenance = dict(full_provenance)
@@ -279,6 +381,13 @@ def main() -> int:
         if args.strict:
             print("ERROR: strict mode enabled and parser warnings were present", file=sys.stderr)
             return 6
+
+    if standalone_warnings:
+        for warning in standalone_warnings:
+            print(f"WARNING: {warning}", file=sys.stderr)
+        if args.strict:
+            print("ERROR: strict mode enabled and standalone warnings were present", file=sys.stderr)
+            return 7
 
     print(
         "SUMMARY "
