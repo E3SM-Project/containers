@@ -296,8 +296,6 @@ def main() -> int:
         return 3
 
     state = build_state_payload(parse_result)
-    state["generated_at_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
     full_urls: set[str] = set()
     full_provenance: dict[str, list[ProvenanceRecord]] = {}
 
@@ -341,7 +339,7 @@ def main() -> int:
                     ProvenanceRecord(
                         workflow=test_record.workflow,
                         test=test_record.name,
-                        case_dir=entry.case_dir,
+                        case_dir=test_record.name,
                         component_list_file=entry.component_list_file,
                         manifest="files.txt",
                         discovery_method="cime-buildconf",
