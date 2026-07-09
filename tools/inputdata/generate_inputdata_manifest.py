@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -64,25 +65,70 @@ def _log(message: str, verbose: bool) -> None:
         print(message)
 
 
-def _standalone_from_workflow_records(records: list[TestRecord]) -> tuple[list[str], dict[str, list[ProvenanceRecord]]]:
+def _collect_standalone_candidate_paths(e3sm_root: Path) -> list[tuple[str, str]]:
+    """Return (source_path, candidate_input_path) pairs from static scans."""
+    candidates: set[tuple[str, str]] = set()
+
+    static_globs = [
+        "components/eamxx/scripts/**/*",
+        "components/eamxx/**/*.yaml",
+        "components/eamxx/**/*.yml",
+        ".github/actions/test-all-eamxx/**/*",
+    ]
+
+    path_pattern = re.compile(r"(?P<path>(?:\$\{?DIN_LOC_ROOT\}?/)?[A-Za-z0-9_./+-]+\.(?:nc|txt|xml|yaml|yml|json|dat|h5))")
+
+    for pattern in static_globs:
+        for file_path in sorted(e3sm_root.glob(pattern)):
+            if not file_path.is_file():
+                continue
+            rel_source = file_path.relative_to(e3sm_root).as_posix()
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            for line in content.splitlines():
+                if "check-input" not in line and "DIN_LOC_ROOT" not in line and "inputdata" not in line:
+                    continue
+                for match in path_pattern.finditer(line):
+                    raw = match.group("path")
+                    candidates.add((rel_source, raw))
+
+    return sorted(candidates)
+
+
+def _standalone_from_workflow_records(
+    e3sm_root: Path,
+    records: list[TestRecord],
+    din_loc_root: Path,
+) -> tuple[list[str], dict[str, list[ProvenanceRecord]]]:
     urls: set[str] = set()
     provenance: dict[str, list[ProvenanceRecord]] = {}
+    standalone_tests = records or [
+        TestRecord(workflow="components/eamxx", kind="standalone_scan", name="standalone-static")
+    ]
 
-    for record in records:
-        # Conservative seed entry for v1 until richer standalone parsing is added.
-        marker_path = f"atm/scream/standalone/{record.name}.txt"
-        url = to_public_inputdata_url(marker_path)
+    static_candidates = _collect_standalone_candidate_paths(e3sm_root)
+    if not static_candidates:
+        return [], {}
+
+    for source_path, raw_path in static_candidates:
+        url = _normalize_and_collect(raw_path, din_loc_root)
+        if not url:
+            continue
         urls.add(url)
-        provenance.setdefault(url, []).append(
-            ProvenanceRecord(
-                workflow=record.workflow,
-                test=record.name,
-                case_dir="",
-                component_list_file="workflow-standalone-ref",
-                manifest="files-standalone.txt",
-                discovery_method="standalone-ref",
+        for record in standalone_tests:
+            provenance.setdefault(url, []).append(
+                ProvenanceRecord(
+                    workflow=record.workflow,
+                    test=record.name,
+                    case_dir="",
+                    component_list_file=source_path,
+                    manifest="files-standalone.txt",
+                    discovery_method="standalone-static",
+                )
             )
-        )
 
     return sorted(urls), provenance
 
@@ -208,7 +254,9 @@ def main() -> int:
         return 5
 
     standalone_urls, standalone_provenance = _standalone_from_workflow_records(
-        parse_result.standalone_tests
+        e3sm_root=e3sm_root,
+        records=parse_result.standalone_tests,
+        din_loc_root=din_loc_root,
     )
 
     combined_provenance = dict(full_provenance)
