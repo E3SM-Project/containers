@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,8 @@ class CaseResult:
     workflow: str
     success: bool
     case_dirs: list[str]
+    started_at_utc: str
+    finished_at_utc: str
     error: Optional[str] = None
 
 
@@ -33,13 +36,19 @@ def run_create_test(
 ) -> CaseResult:
     create_test = e3sm_root / "cime" / "scripts" / "create_test"
     if not create_test.exists():
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return CaseResult(
             test_name=test_name,
             workflow=workflow,
             success=False,
             case_dirs=[],
+            started_at_utc=now,
+            finished_at_utc=now,
             error=f"Missing create_test script: {create_test}",
         )
+
+    before = set(discover_case_dirs(test_root))
+    started_at_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     command = [
         str(create_test),
@@ -62,8 +71,11 @@ def run_create_test(
         text=True,
         capture_output=True,
     )
+    finished_at_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    case_dirs = discover_case_dirs(test_root)
+    after = set(discover_case_dirs(test_root))
+    new_case_dirs = sorted(after - before)
+    case_dirs = new_case_dirs if new_case_dirs else sorted(after)
 
     if process.returncode != 0:
         stderr_tail = (process.stderr or process.stdout or "").strip().splitlines()
@@ -73,6 +85,8 @@ def run_create_test(
             workflow=workflow,
             success=False,
             case_dirs=case_dirs,
+            started_at_utc=started_at_utc,
+            finished_at_utc=finished_at_utc,
             error=tail,
         )
 
@@ -81,6 +95,8 @@ def run_create_test(
         workflow=workflow,
         success=True,
         case_dirs=case_dirs,
+        started_at_utc=started_at_utc,
+        finished_at_utc=finished_at_utc,
     )
 
 

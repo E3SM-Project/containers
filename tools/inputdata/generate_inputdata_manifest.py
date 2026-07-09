@@ -318,7 +318,11 @@ def main() -> int:
         if not result.success:
             failure_count += 1
             print(
-                f"WARNING: create_test failed for {test_record.name}: {result.error}",
+                "WARNING: create_test failed "
+                f"test={test_record.name} "
+                f"started={result.started_at_utc} "
+                f"finished={result.finished_at_utc} "
+                f"error={result.error}",
                 file=sys.stderr,
             )
             continue
