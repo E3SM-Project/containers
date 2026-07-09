@@ -1,6 +1,8 @@
 # Inputdata Generator
 
-`tools/inputdata` contains the generator that builds the inputdata manifests used by this workspace.
+`tools/inputdata` contains the generator that builds the list of inputdata files required for Github
+Continuous Integration tests.  The purpose is to produce the files that should be included in the CI
+Docker container, avoiding the need for them to be downloaded during CI.
 
 ## What it does
 
