@@ -12,7 +12,12 @@ on:
 
   # Allows manual cleanup on a day where lots of untagged images got generated
   workflow_dispatch:
-
+    inputs:
+      hours_old:
+        description: 'Minimum age (in hours) of untagged images to delete'
+        required: true
+        default: '24'
+        type: number
 jobs:
   delete-pr-images:
     if: github.event_name == 'pull_request'
@@ -67,41 +72,55 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const owner = context.repo.owner;
+            const org = context.repo.owner;
             const package_type = 'container';
             const package_name = 'e3sm-ghci-snl';
 
-            async function listVersions(route, params) {
+            const inputHours = context.payload.inputs?.hours_old;
+            const minHours = inputHours !== undefined ? parseFloat(inputHours) : 24;
+            core.info(`Targeting untagged images older than ${minHours} hours.`);
+
+            async function listVersions() {
               const versions = [];
-              for await (const res of github.paginate.iterator(route, { ...params, per_page: 100 })) {
+              const route = 'GET /orgs/{org}/packages/{package_type}/{package_name}/versions';
+              const params = { org, package_type, package_name, per_page: 100 };
+
+              for await (const res of github.paginate.iterator(route, params)) {
                 versions.push(...res.data);
               }
               return versions;
             }
 
-            let versions;
+            let versions = [];
             try {
-              versions = await listVersions('GET /orgs/{org}/packages/{package_type}/{package_name}/versions', { org: owner, package_type, package_name });
-            } catch (e) {
-              versions = await listVersions('GET /users/{username}/packages/{package_type}/{package_name}/versions', { username: owner, package_type, package_name });
+              versions = await listVersions();
+            } catch (error) {
+              core.setFailed(`Failed to fetch package versions: ${error.message}`);
+              return;
             }
 
+            core.info(`Total versions retrieved from API: ${versions.length}`);
+
             const now = new Date();
-            // Target completely untagged versions older than 24 hours
             const toDelete = versions.filter(v => {
               const tags = v.metadata?.container?.tags || [];
               if (tags.length > 0) return false;
+
               const createdAt = new Date(v.created_at);
-              return (now - createdAt) / (1000 * 60 * 60) > 24;
+              const ageHours = (now - createdAt) / (1000 * 60 * 60);
+              return ageHours > minHours;
             });
 
-            core.info(`Found ${toDelete.length} untagged version(s) to delete.`);
+            core.info(`Found ${toDelete.length} untagged version(s) matching criteria.`);
 
             for (const v of toDelete) {
               try {
-                await github.request('DELETE /orgs/{org}/packages/{package_type}/{package_name}/versions/{package_version_id}', { org: owner, package_type, package_name, package_version_id: v.id });
-              } catch (e) {
-                await github.request('DELETE /users/{username}/packages/{package_type}/{package_name}/versions/{package_version_id}', { username: owner, package_type, package_name, package_version_id: v.id });
+                await github.request(
+                  'DELETE /orgs/{org}/packages/{package_type}/{package_name}/versions/{package_version_id}',
+                  { org, package_type, package_name, package_version_id: v.id }
+                );
+                core.info(`Successfully deleted untagged package version id=${v.id}`);
+              } catch (deleteError) {
+                core.warning(`Failed to delete version id=${v.id}: ${deleteError.message}`);
               }
-              core.info(`Deleted untagged package version id=${v.id}`);
             }
