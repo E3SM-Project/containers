@@ -1,0 +1,60 @@
+modules:
+  default:
+    enable:
+      - lmod
+    roots:
+      lmod: /modulefiles
+    prefix_inspections:
+      lib:
+        - LD_LIBRARY_PATH
+      lib64:
+        - LD_LIBRARY_PATH
+    lmod:
+      hash_length: 0
+      hierarchy:
+        - mpi
+      naming_scheme: '{name}/{version}'
+      projections:
+        all: '{name}/{version}'
+      hide_implicits: true
+      # Explicit targets for <pkg>_ROOT generation in the module files
+      openmpi:
+        environment:
+          set:
+            'OPENMPI_ROOT': '{prefix}'
+            'MPI_ROOT': '{prefix}'
+      mpich:
+        environment:
+          set:
+            'MPICH_ROOT': '{prefix}'
+            'MPI_ROOT': '{prefix}'
+      boost:
+        environment:
+          set:
+            'BOOST_ROOT': '{prefix}'
+      yaml-cpp:
+        environment:
+          set:
+            'YAML_CPP_ROOT': '{prefix}'
+      netlib-lapack:
+        environment:
+          set:
+            'BLAS_ROOT': '{prefix}'
+            'LAPACK_ROOT': '{prefix}'
+      hdf5:
+        environment:
+          set:
+            'HDF5_ROOT': '{prefix}'
+      netcdf-c:
+        environment:
+          set:
+            'NETCDF_C_ROOT': '{prefix}'
+      netcdf-fortran:
+        environment:
+          set:
+            'NETCDF_FORTRAN_ROOT': '{prefix}'
+      parallel-netcdf:
+        environment:
+          set:
+            'PARALLEL_NETCDF_ROOT': '{prefix}'
+
