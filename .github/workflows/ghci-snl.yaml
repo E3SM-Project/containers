@@ -71,3 +71,69 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  compiler:
+    runs-on: ubuntu-latest
+    needs: base
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gnu
+            spack_compiler: gcc
+            version: 13.3.0
+            tag: gnu-13.3.0
+          - compiler: intel
+            spack_compiler: oneapi
+            version: 2024.1.0
+            tag: intel-2024.1.0
+    name: ${{ matrix.compiler }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          show-progress: false
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/e3sm-ghci-snl
+          tags: |
+            type=raw,value=${{ matrix.tag }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr,prefix=${{ matrix.tag }}-pr-
+            type=ref,event=branch,prefix=${{ matrix.tag }}-
+            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.tag }}-
+          labels: |
+            org.opencontainers.image.description=${{ matrix.compiler }} compiler base image for E3SM ghci-snl images used for testing on github actions
+
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: ghci-snl/compiler/
+          file: ghci-snl/compiler/Dockerfile
+          push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COMPILER=${{ matrix.spack_compiler }}
+            COMPILER_VERSION=${{ matrix.version }}
+            BASE_TAG=${{ github.event_name == 'pull_request' && format('base-pr-{0}', github.event.pull_request.number) || 'base' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
