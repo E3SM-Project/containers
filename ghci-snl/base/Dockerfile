@@ -71,6 +71,7 @@ ENV LANG=en_US.UTF-8 \
 ARG SPACK_VER=v0.23.1
 ENV SPACK_ROOT=/spack \
     SPACK_ARCH=linux-rhel9-x86_64 \
+    SPACK_SYSTEM_CONFIG_PATH=/spack-configuration \
     PATH=/spack/bin:$PATH
 
 RUN git clone --depth 1 --branch "${SPACK_VER}" https://github.com/spack/spack.git /spack
