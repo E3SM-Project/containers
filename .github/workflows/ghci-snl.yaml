@@ -136,5 +136,5 @@ jobs:
             COMPILER=${{ matrix.spack_compiler }}
             COMPILER_VERSION=${{ matrix.version }}
             BASE_TAG=${{ github.event_name == 'pull_request' && format('base-pr-{0}', github.event.pull_request.number) || 'base' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.compiler }}
+          cache-to: type=gha,scope=${{ matrix.compiler }},mode=max
