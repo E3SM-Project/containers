@@ -32,8 +32,7 @@ RUN dnf -y install \
     && rm -rf /var/cache/dnf
 
 # 4. Utilities, Archiving & Environment Tools
-RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
-    dnf -y --enablerepo=epel --allowerasing install \
+RUN dnf -y --enablerepo=epel --allowerasing install \
         bind-utils \
         bzip2 \
         curl \
