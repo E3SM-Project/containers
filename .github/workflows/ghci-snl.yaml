@@ -3,6 +3,7 @@ name: ghci-snl
 on:
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, ready_for_review, reopened]
     paths:
       - 'ghci-snl/**'
       - '.github/workflows/ghci-snl.yaml'
