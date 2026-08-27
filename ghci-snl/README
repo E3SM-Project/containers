@@ -1,0 +1,78 @@
+# E3SM GHCI-SNL Containers
+
+Containerized development and testing environments for E3SM workflows using UBI9-based container images, managed via Podman on any compatible host system.
+
+## Prerequisite: GitHub container registry (GHCR) authentication
+
+Our images are stored on GitHub's container registry. You must authenticate with GHCR before running `podman run` or `podman pull`:
+
+1. **Create a personal access token (PAT):**
+   - Go to your GitHub account **Settings > Developer settings > Personal access tokens**.
+   - Generate a token (Classic or Fine-grained) with the **`read:packages`** scope enabled (plus `write:packages` if you plan to push images).
+
+2. **Log in via podman:**
+   Run the following command in your terminal and enter your GitHub username and your generated PAT when prompted:
+   ```bash
+   podman login ghcr.io
+   ```
+
+## Quick start: running the container
+
+To launch an interactive container with Podman while correctly handling user permissions and mounting required data directories, use the following template:
+
+```bash
+podman run --rm -it \
+  --userns=keep-id \
+  -v /path/to/host/inputdata:/projects/e3sm/data/inputdata:z \
+  -v /path/to/host/baselines:/projects/e3sm/data/baselines:z \
+  ghcr.io/E3SM-Project/e3sm-ghci-snl:gnu-cpu-env /bin/bash
+```
+
+## Important Storage & Permission Guidelines
+
+- **Input data** (`inputdata`): Required for downloading and reading datasets.
+  - If you run containerized processes as root (without `--userns=keep-id`),
+    you will successfully have permissions to write downloaded files into `/projects/e3sm/data/inputdata`.
+  - However, running MPI as root will typically fail because modern MPI implementations (like OpenMPI/MPICH) refuse to execute under root privileges for security reasons.
+  - Therefore, using `--userns=keep-id` is strongly recommended so your local user owns the processes, avoiding MPI blocks (unless you manually override or hack your `mpirun` flags to bypass root checks).
+
+- **Baselines** (`baselines`): optional. If you are not running regression tests or comparing against baseline output files, you can omit the baselines volume mount entirely.
+
+- **SELinux** (`:z`): if you are running on an SELinux-enforced host (such as RHEL or Fedora), make sure to append `:z` to your volume mounts so Podman adjusts the container access labels correctly.
+
+## Python Environment & Custom Packages
+
+The container comes pre-configured with a virtual environment named `eamxx-venv` which should be activated or loaded at startup.
+
+- If you need additional Python packages for your testing or development workflow, you can install them via pip on the fly:
+
+```bash
+pip install <package-name>
+```
+
+- Any packages installed this way will persist inside the active session's `eamxx-venv`.
+
+## Manually rebuilding the stack
+
+If you need to test with a different compiler or library version (for example, upgrading from GCC 13.3.0 to GCC 14), you can rebuild the container stack locally using custom build arguments:
+
+- **Build the custom compiler container**:
+  Navigate to the repository root and build the compiler image specifying your target version:
+
+```bash
+podman build \\
+  --build-arg COMPILER=gcc \\
+  --build-arg COMPILER_VERSION=14.1.0 \\
+  --tag e3sm-compiler:gcc-14.1.0 \\
+  ghci-snl/compiler/
+```
+
+- **Build the environment on top**:
+Update your environment Dockerfile or build command to point to your new local base tag:
+
+```bash
+podman build \\
+  --build-arg BASE_TAG=gcc-14.1.0 \\
+  --tag e3sm-env:gnu-cpu-env-gcc14 \\
+  ghci-snl/env/gnu-cpu-env/
+```
