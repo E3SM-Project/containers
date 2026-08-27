@@ -1,5 +1,6 @@
 ARG BASE_TAG=base
-FROM ghcr.io/e3sm-project/e3sm-ghci-snl:${BASE_TAG}
+ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-ghci-snl
+FROM ${BASE_IMAGE}:${BASE_TAG}
 
 # Must pass these build args to pick compiler/compiler-version
 ARG COMPILER

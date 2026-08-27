@@ -1,6 +1,6 @@
-# NOTE: edit these lines if you want a different base image and/or compiler/compiler-version
-ARG BASE_TAG=none
-FROM ghcr.io/e3sm-project/e3sm-ghci-snl:${BASE_TAG}
+ARG BASE_TAG=base
+ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-ghci-snl
+FROM ${BASE_IMAGE}:${BASE_TAG}
 
 # Install packages in chunks, so we can tweak versions of some pkg without
 # rebuilding the whole image. Hence, put "stable" pkgs first to minimize rebuild time
@@ -56,10 +56,14 @@ RUN rm -rf /spack-buildcache && \
     rm -rf /spack/*
 
 # CIME tests need a bunch of perl
-RUN yum install -y perl
+RUN microdnf install -y perl && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
 
 # Install MOAB
-RUN yum install -y autoconf automake libtool
+RUN microdnf install -y autoconf automake libtool && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
 
 RUN . /etc/profile.d/eamxx-env.sh && \
     git clone https://github.com/e3sm-project/e3sm /tmp/e3sm && \

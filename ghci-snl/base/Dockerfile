@@ -1,13 +1,19 @@
-FROM registry.access.redhat.com/ubi9:latest
+FROM registry.access.redhat.com/ubi9-minimal:latest
 
 # 1. Setup EPEL repository
-RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
-    && dnf config-manager --set-disabled epel \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
+RUN microdnf update -y && \
+    microdnf install -y ca-certificates && \
+    update-ca-trust && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
 
-# 2. Core Build Tools & Compilers
-RUN dnf -y install \
+RUN rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    sed -i 's/enabled=1/enabled=0/g' /etc/yum.repos.d/epel*.repo && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
+
+# 2. Core build tools & compilers
+RUN microdnf -y install \
         binutils \
         bzip2-devel \
         diffutils \
@@ -20,22 +26,22 @@ RUN dnf -y install \
         ncurses-devel \
         patch \
         pkgconfig \
-    && dnf clean all \
+    && microdnf clean all \
     && rm -rf /var/cache/dnf
 
-# 3. Scripting Runtimes (Python & Perl)
-RUN dnf -y install \
+# 3. Scripting runtimes (python & perl)
+RUN microdnf -y install \
         perl-devel \
         python3 \
         python3-pip \
-    && dnf clean all \
+    && microdnf clean all \
     && rm -rf /var/cache/dnf
 
-# 4. Utilities, Archiving & Environment Tools
-RUN dnf -y --enablerepo=epel --allowerasing install \
+# 4. Utilities, archiving & environment tools
+RUN microdnf -y --enablerepo=epel install \
         bind-utils \
         bzip2 \
-        curl \
+        curl-minimal \
         git \
         gzip \
         hostname \
@@ -48,26 +54,21 @@ RUN dnf -y --enablerepo=epel --allowerasing install \
         unzip \
         wget \
         xz \
-    && dnf clean all \
+    && microdnf clean all \
     && rm -rf /var/cache/dnf
 
-# 5. Install Locales
-RUN dnf -y install \
-        glibc-common glibc-langpack-en glibc-locale-source && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf
-
-# 6. Configure Locales
-RUN localedef -i en_US -f UTF-8 en_US.UTF-8 && \
-    echo "LANG=en_US.UTF-8" >> /etc/locale.conf && \
-    echo "LC_ALL=en_US.UTF-8" >> /etc/locale.conf
+# 5. Locales configuration
+RUN microdnf -y install \
+        glibc-langpack-en \
+    && microdnf clean all \
+    && rm -rf /var/cache/dnf
 
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     LC_CTYPE=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
 
-# 7. Setup SPACK
+# 6. Setup SPACK
 ARG SPACK_VER=v0.23.1
 ENV SPACK_ROOT=/spack \
     SPACK_ARCH=linux-rhel9-x86_64 \
@@ -81,7 +82,7 @@ ADD spack-configuration/packages.yaml /spack-configuration/packages.yaml
 ADD spack-configuration/config.yaml /spack-configuration/config.yaml
 ADD spack-configuration/mirrors.yaml /spack-configuration/mirrors.yaml
 
-# PHASE 3: Directory Setup & User Shell Environment
+# 7. Setup project directory & user shell environment
 RUN mkdir -p /projects/e3sm/software /projects/e3sm/data /opt/share && \
     echo 'bind "\"\\e[A\": history-search-backward"' > /opt/share/bash-goodies.sh && \
     echo 'bind "\"\\e[B\": history-search-forward"' >> /opt/share/bash-goodies.sh && \
