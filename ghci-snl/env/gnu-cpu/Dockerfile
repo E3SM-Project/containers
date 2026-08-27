@@ -56,10 +56,14 @@ RUN rm -rf /spack-buildcache && \
     rm -rf /spack/*
 
 # CIME tests need a bunch of perl
-RUN yum install -y perl
+RUN microdnf install -y perl && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
 
 # Install MOAB
-RUN yum install -y autoconf automake libtool
+RUN microdnf install -y autoconf automake libtool && \
+    microdnf clean all && \
+    rm -rf /var/cache/dnf
 
 RUN . /etc/profile.d/eamxx-env.sh && \
     git clone https://github.com/e3sm-project/e3sm /tmp/e3sm && \
