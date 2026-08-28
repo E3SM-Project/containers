@@ -1,4 +1,4 @@
-ARG BASE_TAG=base
+ARG BASE_TAG=UNSET
 ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-ghci-snl
 FROM ${BASE_IMAGE}:${BASE_TAG}
 

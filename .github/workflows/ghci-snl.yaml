@@ -72,6 +72,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
   compiler:
     runs-on: ubuntu-latest
     needs: base
@@ -136,13 +137,27 @@ jobs:
             BASE_TAG=${{ github.event_name == 'pull_request' && format('base-pr-{0}', github.event.pull_request.number) || 'base' }}
           cache-from: type=gha,scope=${{ matrix.compiler }}
           cache-to: type=gha,scope=${{ matrix.compiler }},mode=max
-  gnu-cpu-env:
+
+  final-env:
     runs-on: ubuntu-latest
     needs: compiler
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gnu
+            tag: gnu-cpu-env
+            version: 13.3.0
+          - compiler: gnu
+            tag: gnu-cuda-env
+            version: 13.3.0
+          - compiler: intel
+            tag: intel-cpu-env
+            version: 2024.1.0
 
     steps:
       - name: Checkout
@@ -168,22 +183,22 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/e3sm-ghci-snl
           tags: |
-            type=raw,value=gnu-cpu-env,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=pr,prefix=gnu-cpu-env-pr-
-            type=ref,event=branch,prefix=gnu-cpu-env-
-            type=match,pattern=ghci-snl-(.*),group=1,prefix=gnu-cpu-env
+            type=raw,value=${{ matrix.tag }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr,prefix=${{ matrix.tag }}-pr-
+            type=ref,event=branch,prefix=${{ matrix.tag }}-
+            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.tag }}
           labels: |
-            org.opencontainers.image.description=GNU env image for E3SM ghci-snl testing on CPU on GitHub actions
+            org.opencontainers.image.description=${{ matrix.tag }} image for E3SM ghci-snl testing on CPU on GitHub actions
 
       - name: Push
         uses: docker/build-push-action@v6
         with:
-          context: ghci-snl/env/gnu-cpu
-          file: ghci-snl/env/gnu-cpu/Dockerfile
+          context: ghci-snl/final/${{ matrix.tag }}
+          file: ghci-snl/final/${{ matrix.tag }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_TAG=${{ github.event_name == 'pull_request' && format('gnu-13.3.0-pr-{0}', github.event.pull_request.number) || 'gnu-13.3.0' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+          cache-from: type=gha,scope=${{ matrix.tag }}
+          cache-to: type=gha,scope=${{ matrix.tag }},mode=max
