@@ -56,6 +56,7 @@ RUN microdnf -y --enablerepo=epel install \
         sudo \
         tar \
         unzip \
+        vi \
         wget \
         xz \
     && microdnf clean all \
