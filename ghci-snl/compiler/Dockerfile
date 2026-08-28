@@ -48,7 +48,7 @@ RUN source /spack/share/spack/setup-env.sh && source /etc/profile.d/compiler_nam
 #       to be re-installed with diff compiler, and lmod to reload the proper version.
 #       This is 100% fine, but would produce rather lengthy warnings.
 RUN source /etc/profile.d/compiler_name.sh && \
-    echo "source /etc/profile.d/modules.sh" > /etc/profile.d/eamxx-env.sh &&  \
+    echo "source /etc/profile.d/modules.sh" >> /etc/profile.d/eamxx-env.sh &&  \
     echo "MODULEPATH=/modulefiles/${SPACK_ARCH}/Core" >> /etc/profile.d/eamxx-env.sh && \
     echo "export LMOD_EXPERT=1" >> /etc/profile.d/eamxx-env.sh && \
     echo "export LMOD_DISABLE_WARNINGS=yes" >> /etc/profile.d/eamxx-env.sh && \
