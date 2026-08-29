@@ -67,7 +67,7 @@ RUN microdnf install -y autoconf automake libtool && \
 
 RUN . /etc/profile.d/eamxx-env.sh && \
     git clone https://github.com/e3sm-project/e3sm /tmp/e3sm && \
-    cd /tmp/e3sm && . git submodule update --init cime
+    cd /tmp/e3sm && git submodule update --init cime
 
 RUN . /etc/profile.d/eamxx-env.sh && \
     curl -fsSL "https://bitbucket.org/fathomteam/moab/raw/vijaysm/automated-build-scripts/install/install-bootstrap.sh?cb=$RANDOM" > /tmp/install-bootstrap.sh && \
