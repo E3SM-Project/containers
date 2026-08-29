@@ -186,7 +186,7 @@ jobs:
             type=raw,value=${{ matrix.tag }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr,prefix=${{ matrix.tag }}-pr-
             type=ref,event=branch,prefix=${{ matrix.tag }}-
-            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.tag }}
+            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.tag }}-
           labels: |
             org.opencontainers.image.description=${{ matrix.tag }} image for E3SM ghci-snl testing on CPU on GitHub actions
 
