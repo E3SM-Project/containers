@@ -3,18 +3,6 @@ ARG NVIDIA_DRIVER_VERSION=535
 ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-ghci-snl
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
-# Add cuda drivers
-# EXPLANATION: blake currently runs cuda drivers version 535.
-# The default behavior of the nvidia repo is to only enable the 580
-# version, so we first need to enable the 535 version stream
-COPY cuda-rhel9.repo /etc/yum.repos.d/cuda-rhel9.repo
-RUN microdnf --enablerepo=cuda-rhel9-x86_64 -y install \
-    nvidia-driver-NVML-535.86.10      \
-    nvidia-driver-cuda-535.86.10      \
-    nvidia-driver-cuda-libs-535.86.10 \
-    nvidia-driver-535.86.10           \
-    nvidia-driver-libs-535.86.10
-
 # Install packages in chunks, so we can tweak versions of some pkg without
 # rebuilding the whole image. Hence, put "stable" pkgs first to minimize rebuild time
 # NOTE: the env vars COMPILER, COMPILER_VERSION, and SPACK_ARCH are defined in the base image
