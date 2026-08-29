@@ -41,6 +41,7 @@ RUN echo "module load netcdf-c netcdf-fortran parallel-netcdf" >> /etc/profile.d
 # Install numpy/cupy
 RUN source /etc/profile.d/modules.sh        &&  \
     source /etc/profile.d/eamxx-env.sh &&  \
+    LIBRARY_PATH="$CUDA_ROOT/lib64/stubs:$LIBRARY_PATH" \
     python3 -m pip install numpy cupy
 
 # Install pytorch
