@@ -75,8 +75,10 @@ ENV LANG=en_US.UTF-8 \
 
 # 7. Setup SPACK
 ARG SPACK_VER=v0.23.1
+# Override at build time (e.g. --build-arg SPACK_ARCH=linux-rhel9-aarch64) for aarch64 images
+ARG SPACK_ARCH=linux-rhel9-x86_64
 ENV SPACK_ROOT=/spack \
-    SPACK_ARCH=linux-rhel9-x86_64 \
+    SPACK_ARCH=${SPACK_ARCH} \
     SPACK_SYSTEM_CONFIG_PATH=/spack-configuration \
     PATH=/spack/bin:$PATH
 
