@@ -21,6 +21,26 @@ RUN source /spack/share/spack/setup-env.sh && \
 RUN source /spack/share/spack/setup-env.sh && \
     spack install hdf5 netcdf-c+mpi netcdf-fortran parallel-netcdf %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
 
+# MOAB's "zoltan" TPL, as fetched by the vendor install-bootstrap.sh script below from
+# its default (circa-2013) dist tarball mirror, ships a bundled config.guess/
+# config.sub that predates the aarch64 GNU triplet, so its ./configure fails
+# immediately on aarch64 -- and the vendor script has no remediation pattern that
+# recognizes that failure, so it just aborts. We can't patch that third-party
+# script, so work around it here instead: pre-build zoltan via spack (whose
+# package.py always reruns autoreconf, regenerating a current, aarch64-aware
+# config.guess/config.sub) while spack is still available in this image, matching
+# the same version/MPI/link flags the vendor script would have used itself. The
+# vendor script's own TPL-reuse feature (REUSE_TPLS=yes by default) will find this
+# already built at the path it expects and skip building zoltan itself. Guarded to
+# aarch64 only: x86_64 is unaffected since its older bundled triplet files already
+# recognize x86_64.
+RUN if [[ "$SPACK_ARCH" == *aarch64* ]]; then \
+        source /spack/share/spack/setup-env.sh && \
+        spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
+        mkdir -p /projects/e3sm/software/moab/tpls && \
+        ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan; \
+    fi
+
 # Debugging libs
 RUN source /spack/share/spack/setup-env.sh && \
     spack install valgrind@3.20~mpi gdb@13.1 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
