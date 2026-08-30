@@ -28,6 +28,25 @@ podman run --rm -it \
   ghcr.io/E3SM-Project/e3sm-ghci-snl:gnu-cpu-env /bin/bash
 ```
 
+## Available images
+
+Each image is published for `x86_64`; the GNU-based ones are also published for
+`aarch64` (native builds, no emulation), under an `-aarch64`-suffixed tag:
+
+| Tag                      | Arch      | Compiler | Notes                                             |
+|--------------------------|-----------|----------|----------------------------------------------------|
+| `gnu-cpu-env`            | x86_64    | GNU      | CPU-only stack                                     |
+| `gnu-cpu-env-aarch64`    | aarch64   | GNU      | CPU-only stack; runs well on macOS M1/Apple Silicon |
+| `gnu-cuda-env`           | x86_64    | GNU      | CUDA 12.4 stack                                    |
+| `gnu-cuda-env-aarch64`   | aarch64   | GNU      | CUDA 13.0 stack; targets NVIDIA aarch64 ("superchip") systems such as Grace Hopper/Blackwell |
+| `intel-cpu-env`          | x86_64    | Intel    | CPU-only stack (Intel oneAPI is x86_64-only)        |
+
+To pull an aarch64 image explicitly (e.g. on an Apple Silicon Mac via Podman machine, or on an NVIDIA Grace-based host):
+
+```bash
+podman pull ghcr.io/E3SM-Project/e3sm-ghci-snl:gnu-cpu-env-aarch64
+```
+
 ## Important Storage & Permission Guidelines
 
 - **Input data** (`inputdata`): Required for downloading and reading datasets.
@@ -55,6 +74,16 @@ pip install <package-name>
 ## Manually rebuilding the stack
 
 If you need to test with a different compiler or library version (for example, upgrading from GCC 13.3.0 to GCC 14), you can rebuild the container stack locally using custom build arguments:
+
+- **(aarch64 only) Build the base image for your target arch**:
+  The `x86_64` base image is built by default; for `aarch64` targets, override `SPACK_ARCH`:
+
+```bash
+podman build \\
+  --build-arg SPACK_ARCH=linux-rhel9-aarch64 \\
+  --tag e3sm-base:aarch64 \\
+  ghci-snl/base/
+```
 
 - **Build the custom compiler container**:
   Navigate to the repository root and build the compiler image specifying your target version:

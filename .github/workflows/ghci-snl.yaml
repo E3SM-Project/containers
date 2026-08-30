@@ -25,11 +25,24 @@ concurrency:
 
 jobs:
   base:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runs_on: ubuntu-latest
+            spack_arch: linux-rhel9-x86_64
+            tag_suffix: ''
+          - arch: aarch64
+            runs_on: ubuntu-22.04-arm
+            spack_arch: linux-rhel9-aarch64
+            tag_suffix: '-aarch64'
+    name: base-${{ matrix.arch }}
 
     steps:
       - name: Checkout
@@ -55,12 +68,12 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/e3sm-ghci-snl
           tags: |
-            type=raw,value=base,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=pr,prefix=base-pr-
-            type=ref,event=branch,prefix=base-
-            type=match,pattern=ghci-snl-(.*),group=1,prefix=base-
+            type=raw,value=base${{ matrix.tag_suffix }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr,prefix=base${{ matrix.tag_suffix }}-pr-
+            type=ref,event=branch,prefix=base${{ matrix.tag_suffix }}-
+            type=match,pattern=ghci-snl-(.*),group=1,prefix=base${{ matrix.tag_suffix }}-
           labels: |
-            org.opencontainers.image.description=Base image for E3SM ghci-snl containers used for testing on GitHub actions
+            org.opencontainers.image.description=Base image (${{ matrix.arch }}) for E3SM ghci-snl containers used for testing on GitHub actions
 
       - name: Push
         uses: docker/build-push-action@v6
@@ -70,11 +83,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            SPACK_ARCH=${{ matrix.spack_arch }}
+          cache-from: type=gha,scope=base-${{ matrix.arch }}
+          cache-to: type=gha,scope=base-${{ matrix.arch }},mode=max
 
   compiler:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     needs: base
     permissions:
       contents: read
@@ -87,10 +102,22 @@ jobs:
           - compiler: gnu
             spack_compiler: gcc
             version: 13.3.0
+            arch: x86_64
+            runs_on: ubuntu-latest
+            tag_suffix: ''
           - compiler: intel
             spack_compiler: oneapi
             version: 2024.1.0
-    name: ${{ matrix.compiler }}
+            arch: x86_64
+            runs_on: ubuntu-latest
+            tag_suffix: ''
+          - compiler: gnu
+            spack_compiler: gcc
+            version: 13.3.0
+            arch: aarch64
+            runs_on: ubuntu-22.04-arm
+            tag_suffix: '-aarch64'
+    name: ${{ matrix.compiler }}-${{ matrix.arch }}
 
     steps:
       - name: Checkout
@@ -116,12 +143,12 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/e3sm-ghci-snl
           tags: |
-            type=raw,value=${{ matrix.compiler }}-${{ matrix.version }},enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=pr,prefix=${{ matrix.compiler }}-${{ matrix.version }}-pr-
-            type=ref,event=branch,prefix=${{ matrix.compiler }}-${{ matrix.version }}-
-            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.compiler }}-${{ matrix.version }}-
+            type=raw,value=${{ matrix.compiler }}-${{ matrix.version }}${{ matrix.tag_suffix }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr,prefix=${{ matrix.compiler }}-${{ matrix.version }}${{ matrix.tag_suffix }}-pr-
+            type=ref,event=branch,prefix=${{ matrix.compiler }}-${{ matrix.version }}${{ matrix.tag_suffix }}-
+            type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.compiler }}-${{ matrix.version }}${{ matrix.tag_suffix }}-
           labels: |
-            org.opencontainers.image.description=${{ matrix.compiler }} compiler base image for E3SM ghci-snl images used for testing on GitHub actions
+            org.opencontainers.image.description=${{ matrix.compiler }} compiler base image (${{ matrix.arch }}) for E3SM ghci-snl images used for testing on GitHub actions
 
       - name: Push
         uses: docker/build-push-action@v6
@@ -134,12 +161,12 @@ jobs:
           build-args: |
             COMPILER=${{ matrix.spack_compiler }}
             COMPILER_VERSION=${{ matrix.version }}
-            BASE_TAG=${{ github.event_name == 'pull_request' && format('base-pr-{0}', github.event.pull_request.number) || 'base' }}
-          cache-from: type=gha,scope=${{ matrix.compiler }}
-          cache-to: type=gha,scope=${{ matrix.compiler }},mode=max
+            BASE_TAG=${{ github.event_name == 'pull_request' && format('base{0}-pr-{1}', matrix.tag_suffix, github.event.pull_request.number) || format('base{0}', matrix.tag_suffix) }}
+          cache-from: type=gha,scope=${{ matrix.compiler }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.compiler }}-${{ matrix.arch }},mode=max
 
   final-env:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     needs: compiler
     permissions:
       contents: read
@@ -150,14 +177,41 @@ jobs:
       matrix:
         include:
           - compiler: gnu
+            dir: gnu-cpu-env
             tag: gnu-cpu-env
             version: 13.3.0
+            arch: x86_64
+            runs_on: ubuntu-latest
+            tag_suffix: ''
           - compiler: gnu
+            dir: gnu-cuda-env
             tag: gnu-cuda-env
             version: 13.3.0
+            arch: x86_64
+            runs_on: ubuntu-latest
+            tag_suffix: ''
           - compiler: intel
+            dir: intel-cpu-env
             tag: intel-cpu-env
             version: 2024.1.0
+            arch: x86_64
+            runs_on: ubuntu-latest
+            tag_suffix: ''
+          - compiler: gnu
+            dir: gnu-cpu-env
+            tag: gnu-cpu-env-aarch64
+            version: 13.3.0
+            arch: aarch64
+            runs_on: ubuntu-22.04-arm
+            tag_suffix: '-aarch64'
+          - compiler: gnu
+            dir: gnu-cuda-env-aarch64
+            tag: gnu-cuda-env-aarch64
+            version: 13.3.0
+            arch: aarch64
+            runs_on: ubuntu-22.04-arm
+            tag_suffix: '-aarch64'
+    name: ${{ matrix.tag }}
 
     steps:
       - name: Checkout
@@ -188,17 +242,17 @@ jobs:
             type=ref,event=branch,prefix=${{ matrix.tag }}-
             type=match,pattern=ghci-snl-(.*),group=1,prefix=${{ matrix.tag }}-
           labels: |
-            org.opencontainers.image.description=${{ matrix.tag }} image for E3SM ghci-snl testing on CPU on GitHub actions
+            org.opencontainers.image.description=${{ matrix.tag }} image (${{ matrix.arch }}) for E3SM ghci-snl testing on GitHub actions
 
       - name: Push
         uses: docker/build-push-action@v6
         with:
-          context: ghci-snl/final/${{ matrix.tag }}
-          file: ghci-snl/final/${{ matrix.tag }}/Dockerfile
+          context: ghci-snl/final/${{ matrix.dir }}
+          file: ghci-snl/final/${{ matrix.dir }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+            BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ matrix.tag_suffix }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,scope=${{ matrix.tag }},mode=max
