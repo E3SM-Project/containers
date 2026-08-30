@@ -22,10 +22,15 @@ RUN source /spack/share/spack/setup-env.sh && \
     spack install boost netlib-lapack %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
 
 # CUDA (NVIDIA's RHEL9/SBSA repo, since spack@0.23.1 tops out at CUDA 12.6)
+# NOTE: install the compiler+libraries components only, NOT the "cuda-toolkit"
+# meta-package: the latter pulls in cuda-tools -> cuda-visual-tools ->
+# cuda-nsight-systems, which requires desktop/GUI libs (libOpenGL, libxcb-*,
+# libxkbcommon-x11) that aren't available (and aren't wanted) in this minimal,
+# headless container.
 RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo \
         -o /etc/yum.repos.d/cuda-rhel9.repo && \
     rpm --import "$(sed -n 's/^gpgkey=//p' /etc/yum.repos.d/cuda-rhel9.repo | head -1)" && \
-    microdnf install -y cuda-toolkit-13-0 && \
+    microdnf install -y cuda-compiler-13-0 cuda-libraries-13-0 cuda-libraries-devel-13-0 && \
     microdnf clean all && \
     rm -rf /var/cache/dnf
 
