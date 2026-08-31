@@ -37,7 +37,7 @@ RUN source /spack/share/spack/setup-env.sh && \
 source /spack/share/spack/setup-env.sh && \
 spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
 mkdir -p /projects/e3sm/software/moab/tpls && \
-ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan; \
+ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan
 
 # Debugging libs
 RUN source /spack/share/spack/setup-env.sh && \
