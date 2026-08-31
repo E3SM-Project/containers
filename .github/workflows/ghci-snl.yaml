@@ -99,24 +99,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # NOTE: tag_suffix is the suffix of the tag THIS job publishes, while
+          #       base_suffix is the suffix of the base image tag this job builds
+          #       FROM. They differ on x86_64: the base job always tags by arch,
+          #       while the compiler images keep their historical unsuffixed
+          #       x86_64 names (which downstream users/CI already pull).
           - compiler: gnu
             spack_compiler: gcc
             version: 13.3.0
             arch: x86_64
             runs_on: ubuntu-latest
             tag_suffix: ''
+            base_suffix: '-x86_64'
           - compiler: intel
             spack_compiler: oneapi
             version: 2024.1.0
             arch: x86_64
             runs_on: ubuntu-latest
             tag_suffix: ''
+            base_suffix: '-x86_64'
           - compiler: gnu
             spack_compiler: gcc
             version: 13.3.0
             arch: aarch64
             runs_on: ubuntu-22.04-arm
             tag_suffix: '-aarch64'
+            base_suffix: '-aarch64'
     name: ${{ matrix.compiler }}-${{ matrix.arch }}
 
     steps:
@@ -161,7 +169,7 @@ jobs:
           build-args: |
             COMPILER=${{ matrix.spack_compiler }}
             COMPILER_VERSION=${{ matrix.version }}
-            BASE_TAG=${{ github.event_name == 'pull_request' && format('base{0}-pr-{1}', matrix.tag_suffix, github.event.pull_request.number) || format('base{0}', matrix.tag_suffix) }}
+            BASE_TAG=${{ github.event_name == 'pull_request' && format('base{0}-pr-{1}', matrix.base_suffix, github.event.pull_request.number) || format('base{0}', matrix.base_suffix) }}
           cache-from: type=gha,scope=${{ matrix.compiler }}-${{ matrix.arch }}
           cache-to: type=gha,scope=${{ matrix.compiler }}-${{ matrix.arch }},mode=max
 

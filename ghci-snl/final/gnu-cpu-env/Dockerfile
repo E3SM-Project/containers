@@ -31,13 +31,13 @@ RUN source /spack/share/spack/setup-env.sh && \
 # config.guess/config.sub) while spack is still available in this image, matching
 # the same version/MPI/link flags the vendor script would have used itself. The
 # vendor script's own TPL-reuse feature (REUSE_TPLS=yes by default) will find this
-# already built at the path it expects and skip building zoltan itself. Guarded to
-# aarch64 only: x86_64 is unaffected since its older bundled triplet files already
-# recognize x86_64.
+# already built at the path it expects and skip building zoltan itself. Done for
+# every arch (not just aarch64, which is the only one that needs it) to keep this
+# recipe simple: on x86_64 the vendor script would have built the same thing.
 RUN source /spack/share/spack/setup-env.sh && \
-spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
-mkdir -p /projects/e3sm/software/moab/tpls && \
-ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan
+    spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
+    mkdir -p /projects/e3sm/software/moab/tpls && \
+    ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan
 
 # Debugging libs
 RUN source /spack/share/spack/setup-env.sh && \
