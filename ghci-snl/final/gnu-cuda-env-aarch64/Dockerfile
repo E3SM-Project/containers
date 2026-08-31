@@ -52,7 +52,7 @@ RUN echo "module load boost netlib-lapack" >> /etc/profile.d/eamxx-env.sh
 # CUDA isn't a spack/lmod module here (see note above), so export its env by hand
 RUN echo "export CUDA_HOME=/usr/local/cuda" >> /etc/profile.d/eamxx-env.sh && \
     echo "export PATH=\$CUDA_HOME/bin:\$PATH" >> /etc/profile.d/eamxx-env.sh && \
-    echo "export LD_LIBRARY_PATH=\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH" >> /etc/profile.d/eamxx-env.sh
+    echo "export LD_LIBRARY_PATH=\$CUDA_HOME/lib64\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}" >> /etc/profile.d/eamxx-env.sh
 RUN echo "module load mpich" >> /etc/profile.d/eamxx-env.sh
 RUN echo "module load netcdf-c netcdf-fortran parallel-netcdf" >> /etc/profile.d/eamxx-env.sh
 
