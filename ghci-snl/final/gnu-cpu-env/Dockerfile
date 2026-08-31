@@ -34,12 +34,10 @@ RUN source /spack/share/spack/setup-env.sh && \
 # already built at the path it expects and skip building zoltan itself. Guarded to
 # aarch64 only: x86_64 is unaffected since its older bundled triplet files already
 # recognize x86_64.
-RUN if [[ "$SPACK_ARCH" == *aarch64* ]]; then \
-        source /spack/share/spack/setup-env.sh && \
-        spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
-        mkdir -p /projects/e3sm/software/moab/tpls && \
-        ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan; \
-    fi
+source /spack/share/spack/setup-env.sh && \
+spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4 && \
+mkdir -p /projects/e3sm/software/moab/tpls && \
+ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^openmpi@4.1.4)" /projects/e3sm/software/moab/tpls/zoltan; \
 
 # Debugging libs
 RUN source /spack/share/spack/setup-env.sh && \

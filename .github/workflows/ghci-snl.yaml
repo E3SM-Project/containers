@@ -37,7 +37,7 @@ jobs:
           - arch: x86_64
             runs_on: ubuntu-latest
             spack_arch: linux-rhel9-x86_64
-            tag_suffix: ''
+            tag_suffix: '-x86_64'
           - arch: aarch64
             runs_on: ubuntu-22.04-arm
             spack_arch: linux-rhel9-aarch64
