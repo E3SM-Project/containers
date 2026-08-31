@@ -79,9 +79,9 @@ If you need to test with a different compiler or library version (for example, u
   The `x86_64` base image is built by default; for `aarch64` targets, override `SPACK_ARCH`:
 
 ```bash
-podman build \\
-  --build-arg SPACK_ARCH=linux-rhel9-aarch64 \\
-  --tag e3sm-base:aarch64 \\
+podman build \
+  --build-arg SPACK_ARCH=linux-rhel9-aarch64 \
+  --tag e3sm-base:aarch64 \
   ghci-snl/base/
 ```
 
@@ -89,10 +89,10 @@ podman build \\
   Navigate to the repository root and build the compiler image specifying your target version:
 
 ```bash
-podman build \\
-  --build-arg COMPILER=gcc \\
-  --build-arg COMPILER_VERSION=14.1.0 \\
-  --tag e3sm-compiler:gcc-14.1.0 \\
+podman build \
+  --build-arg COMPILER=gcc \
+  --build-arg COMPILER_VERSION=14.1.0 \
+  --tag e3sm-compiler:gcc-14.1.0 \
   ghci-snl/compiler/
 ```
 
@@ -100,8 +100,8 @@ podman build \\
 Update your environment Dockerfile or build command to point to your new local base tag:
 
 ```bash
-podman build \\
-  --build-arg BASE_TAG=gcc-14.1.0 \\
-  --tag e3sm-env:gnu-cpu-env-gcc14 \\
+podman build \
+  --build-arg BASE_TAG=gcc-14.1.0 \
+  --tag e3sm-env:gnu-cpu-env-gcc14 \
   ghci-snl/env/gnu-cpu-env/
 ```
