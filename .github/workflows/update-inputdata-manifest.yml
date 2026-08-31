@@ -1,0 +1,111 @@
+name: update-inputdata-manifest
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-inputdata-manifest
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    container:
+      image: ghcr.io/e3sm-project/containers-ghci:main
+    steps:
+      - name: Checkout containers
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          show-progress: false
+          persist-credentials: false
+
+      - name: Checkout E3SM
+        uses: actions/checkout@v4
+        with:
+          repository: E3SM-Project/E3SM
+          path: E3SM
+          ref: master
+          submodules: recursive
+          show-progress: false
+          persist-credentials: false
+
+      - name: Regenerate inputdata manifests
+        env:
+          NETCDF_C_ROOT: /usr
+          NETCDF_FORTRAN_ROOT: /usr
+          PARALLEL_NETCDF_ROOT: /usr
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/e3sm-inputdata-cases /tmp/e3sm-inputdata-output
+          python3 -m tools.inputdata.generate_inputdata_manifest \
+            --e3sm-root E3SM \
+            --test-root /tmp/e3sm-inputdata-cases \
+            --output-root /tmp/e3sm-inputdata-output \
+            --state-out inputdata/e3sm-workflow-state.json \
+            --files-out inputdata/files.txt \
+            --standalone-files-out inputdata/files-standalone.txt \
+            --missing-files-out inputdata/files-missing.txt \
+            --provenance-out inputdata/provenance.json \
+            --verbose
+
+      - name: Detect manifest changes
+        id: detect
+        run: |
+          set -euo pipefail
+          files=(
+            inputdata/files.txt
+            inputdata/files-standalone.txt
+            inputdata/files-missing.txt
+          )
+
+          if git diff --quiet -- "${files[@]}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build PR metadata
+        if: steps.detect.outputs.changed == 'true'
+        id: metadata
+        run: |
+          set -euo pipefail
+
+          stamp="$(date -u +%Y%m%d)"
+          branch="bot/update-inputdata-manifest-${stamp}-${GITHUB_RUN_ID}"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+
+          summary_path="/tmp/inputdata-pr-summary.md"
+
+          python3 -m tools.inputdata.build_pr_metadata \
+            --output-path "${summary_path}" \
+            --state-path inputdata/e3sm-workflow-state.json
+
+          echo "body_path=${summary_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        if: steps.detect.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ${{ steps.metadata.outputs.branch }}
+          delete-branch: true
+          base: main
+          title: "Update E3SM inputdata manifest"
+          commit-message: "Update inputdata manifest from E3SM workflow tests"
+          body-path: ${{ steps.metadata.outputs.body_path }}
+          add-paths: |
+            inputdata/files.txt
+            inputdata/files-standalone.txt
+            inputdata/files-missing.txt
+            inputdata/e3sm-workflow-state.json
+            inputdata/provenance.json
+          labels: |
+            automated
+            inputdata
