@@ -95,6 +95,12 @@ jobs:
   compiler:
     runs-on: ${{ matrix.runs_on }}
     needs: base
+    # A PR from a fork gets no packages:write, so every stage's "push" below is
+    # false and nothing reaches the registry. This stage builds FROM an image the
+    # previous stage was supposed to publish, so on a fork PR it can only fail on
+    # a tag that was never pushed. Skip it instead, and let the real validation
+    # happen on merge to main (or on a branch pushed to this repo directly).
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       contents: read
       packages: write
@@ -172,6 +178,12 @@ jobs:
   final-env:
     runs-on: ${{ matrix.runs_on }}
     needs: compiler
+    # A PR from a fork gets no packages:write, so every stage's "push" below is
+    # false and nothing reaches the registry. This stage builds FROM an image the
+    # previous stage was supposed to publish, so on a fork PR it can only fail on
+    # a tag that was never pushed. Skip it instead, and let the real validation
+    # happen on merge to main (or on a branch pushed to this repo directly).
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       contents: read
       packages: write
