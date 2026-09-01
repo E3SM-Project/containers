@@ -3,81 +3,154 @@ name: ghci
 on:
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, ready_for_review, reopened]
     paths:
       - 'ghci/**'
       - '.github/workflows/ghci.yaml'
+      - '.github/workflows/build-multiarch.yaml'
   push:
     branches: [ main ]
     paths:
       - 'ghci/**'
       - '.github/workflows/ghci.yaml'
+      - '.github/workflows/build-multiarch.yaml'
     tags:
       - 'ghci-*'
       - '!ghci-snl-*'
 
-env:
-  GCC_VERSION: "11.4.0"
-  MPICH_VERSION: "4.2.3"
-  SZIP_VERSION: "2.1.1"
-  HDF5_VERSION: "1.12.3"
-  NETCDFC_VERSION: "4.9.2"
-  NETCDFCXX_VERSION: "4.2"
-  NETCDFFORTRAN_VERSION: "4.6.1"
-  PNETCDF_VERSION: "1.12.3"
+  workflow_dispatch:
 
+# Cancel in-progress runs for the same PR or branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# base -> <compiler>-<version> -> <compiler>-<backend>-env -> ...-dev, each stage building
+# FROM the arch-independent tag the previous one published. See build-multiarch.yaml.
 jobs:
-  ocis:
-    runs-on: ubuntu-latest
+  base:
+    uses: ./.github/workflows/build-multiarch.yaml
     permissions:
       contents: read
       packages: write
       id-token: write
+    with:
+      image_name: e3sm-ghci
+      tag: base
+      context: ghci/base
+      fork_safe: true
+      description: Base image for E3SM ghci containers
 
-    steps:
-      - 
-        name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          show-progress: false
-          persist-credentials: false
-      -
-        name: GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}-ghci
-          labels: |
-            org.opencontainers.image.description=E3SM ghci container is mainly for testing on github actions
-      -
-        name: QEMU
-        uses: docker/setup-qemu-action@v3
-      -
-        name: Buildx
-        uses: docker/setup-buildx-action@v3
-      -
-        name: Push
-        uses: docker/build-push-action@v6
-        with:
-          context: ghci/
-          file: ghci/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            GCC_VERSION=${{ env.GCC_VERSION }}
-            MPICH_VERSION=${{ env.MPICH_VERSION }}
-            SZIP_VERSION=${{ env.SZIP_VERSION }}
-            HDF5_VERSION=${{ env.HDF5_VERSION }}
-            NETCDFC_VERSION=${{ env.NETCDFC_VERSION }}
-            NETCDFCXX_VERSION=${{ env.NETCDFCXX_VERSION }}
-            NETCDFFORTRAN_VERSION=${{ env.NETCDFFORTRAN_VERSION }}
-            PNETCDF_VERSION=${{ env.PNETCDF_VERSION }}
+  compiler:
+    needs: base
+    name: ${{ matrix.compiler }}
+    uses: ./.github/workflows/build-multiarch.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gnu
+            spack_compiler: gcc
+            version: 13.3.0
+            arches: '["x86_64", "aarch64"]'
+          # Intel oneAPI ships for x86_64 only
+          - compiler: intel
+            spack_compiler: oneapi
+            version: 2024.1.0
+            arches: '["x86_64"]'
+    with:
+      image_name: e3sm-ghci
+      tag: ${{ matrix.compiler }}-${{ matrix.version }}
+      context: ghci/compiler
+      arches: ${{ matrix.arches }}
+      description: ${{ matrix.compiler }} compiler image for E3SM ghci containers
+      build_args: |
+        COMPILER=${{ matrix.spack_compiler }}
+        COMPILER_VERSION=${{ matrix.version }}
+        BASE_TAG=base${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+
+  # The variant list: one context (ghci/final), one set of build args per env.
+  final-env:
+    needs: compiler
+    name: ${{ matrix.env }}
+    uses: ./.github/workflows/build-multiarch.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: gnu-cpu-env
+            compiler: gnu
+            version: 13.3.0
+            arches: '["x86_64", "aarch64"]'
+            args: |
+              MPI_SPEC=openmpi@4.1.4
+              LAPACK_SPEC=netlib-lapack
+              DEBUG_SPECS=valgrind@3.20~mpi gdb@13.1
+              WITH_CUDA=no
+              WITH_MOAB=yes
+          - env: gnu-cuda-env
+            compiler: gnu
+            version: 13.3.0
+            arches: '["x86_64", "aarch64"]'
+            args: |
+              MPI_SPEC=mpich@4.1.1
+              LAPACK_SPEC=netlib-lapack
+              DEBUG_SPECS=
+              WITH_CUDA=yes
+              WITH_MOAB=no
+          # Intel oneAPI ships for x86_64 only
+          - env: intel-cpu-env
+            compiler: intel
+            version: 2024.1.0
+            arches: '["x86_64"]'
+            args: |
+              MPI_SPEC=openmpi@4.1.4
+              LAPACK_SPEC=intel-oneapi-mkl
+              DEBUG_SPECS=valgrind@3.20~mpi
+              WITH_CUDA=no
+              WITH_MOAB=no
+    with:
+      image_name: e3sm-ghci
+      tag: ${{ matrix.env }}
+      context: ghci/final
+      arches: ${{ matrix.arches }}
+      description: ${{ matrix.env }} image for E3SM testing and development
+      build_args: |
+        BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+        ${{ matrix.args }}
+
+  dev:
+    needs: final-env
+    name: ${{ matrix.env }}-dev
+    uses: ./.github/workflows/build-multiarch.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: gnu-cpu-env
+            arches: '["x86_64", "aarch64"]'
+          - env: gnu-cuda-env
+            arches: '["x86_64", "aarch64"]'
+          - env: intel-cpu-env
+            arches: '["x86_64"]'
+    with:
+      image_name: e3sm-ghci
+      tag: ${{ matrix.env }}-dev
+      context: ghci/dev
+      arches: ${{ matrix.arches }}
+      description: ${{ matrix.env }} plus developer tooling
+      build_args: |
+        BASE_TAG=${{ matrix.env }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+        VARIANT=${{ matrix.env }}
