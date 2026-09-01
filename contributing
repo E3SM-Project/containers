@@ -1,11 +1,29 @@
+# Contributing
+
 Contributions are welcome.
 
-Suppose you want to add a new container named "xyz" to this repository. We
-would like to encourage you to add a folder named xyz to build your container
-publicly. In the xyz folder, you can specify your container via a Dockerfile
-(or equivalent). To build the container, add a github actions workflow under
-.github/workflows named xyz.yaml. Name the image "containers-xyz", and have
-the workflow act only on the files added (folder xyz and workflow file). Also,
-tag and release the container with xyz-1.2.3.
+Suppose you want to add a new container named `xyz` to this repository:
 
-See the example provided by the ghci container.
+1. Add a directory named `xyz/` with the recipe (a `Dockerfile`, or several under
+   subdirectories if the build has stages) and a `readme` describing what the image is for
+   and how to run it.
+2. Add a workflow at `.github/workflows/xyz.yaml` that builds it. Scope its `paths:` to
+   `xyz/**` and `.github/workflows/xyz.yaml` so it does not rebuild on unrelated changes,
+   and give it a `concurrency` group so superseded runs get cancelled.
+3. Tag releases as `xyz-1.2.3`; the workflow's `tags:` filter turns that into an image tag.
+
+Some conventions worth following, and why:
+
+- **Do not put an architecture in an image or directory name.** Call
+  `.github/workflows/build-multiarch.yaml`, which builds each arch natively, pushes by
+  digest, and merges the digests into one multi-arch manifest list; `ghci.yaml` is the
+  worked example. Anything an image needs to know about its own architecture it can work
+  out at build time (see how `ghci/base/Dockerfile` derives `SPACK_ARCH`).
+- **Ship software, not data.** Data belongs in a mount, or in its own image.
+- **Run as a non-root user** in anything meant to be run interactively or under MPI.
+- **Keep build steps chunked.** Installing packages a few at a time, stable ones first,
+  means a version bump late in the recipe does not invalidate the whole layer cache.
+- **Clean up package manager caches in the same `RUN`** that installed things, or the
+  cache ends up in the layer regardless.
+
+See the `ghci` container for a worked example.

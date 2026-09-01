@@ -1,0 +1,166 @@
+# Builds one image for several arches and publishes it under a SINGLE, arch-independent
+# tag. Each arch is built natively on its own runner and pushed by digest; the merge job
+# then stitches the digests into one manifest list, so `podman pull <tag>` resolves to the
+# caller's arch and no tag ever needs an arch in its name.
+name: build-multiarch
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: 'Package name under ghcr.io/<owner>/'
+        required: true
+        type: string
+      tag:
+        description: 'Arch-independent tag to publish (e.g. gnu-cpu-env)'
+        required: true
+        type: string
+      context:
+        description: 'Build context directory'
+        required: true
+        type: string
+      arches:
+        description: 'JSON array of arches to build'
+        required: false
+        type: string
+        default: '["x86_64", "aarch64"]'
+      build_args:
+        required: false
+        type: string
+        default: ''
+      description:
+        required: false
+        type: string
+        default: ''
+      release_pattern:
+        description: 'Git tag pattern whose capture group becomes the image tag suffix'
+        required: false
+        type: string
+        default: 'ghci-(.*)'
+      fork_safe:
+        description: 'Build on fork PRs too (nothing can be pushed there, so this is validation only)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+  # A fork PR gets no packages:write, so nothing can be pushed and there is nothing to merge.
+  PUSH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  build:
+    if: ${{ inputs.fork_safe || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(inputs.arches) }}
+    name: ${{ inputs.tag }} (${{ matrix.arch }})
+
+    steps:
+      # github.repository_owner is mixed case (E3SM-Project) and image refs must be
+      # lowercase. metadata-action does this itself; a raw buildx ref does not.
+      - name: Lowercase image ref
+        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          show-progress: false
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.context }}/Dockerfile
+          build-args: ${{ inputs.build_args }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=${{ env.PUSH }},name-canonical=true,push=${{ env.PUSH }}
+          cache-from: type=gha,scope=${{ inputs.tag }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ inputs.tag }}-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        if: env.PUSH == 'true'
+        run: |
+          mkdir -p /tmp/digests
+          echo -n "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
+
+      # Arch first, so the download pattern below cannot also match a longer tag that this
+      # one is a prefix of (e.g. gnu-cpu-env vs gnu-cpu-env-dev).
+      - name: Upload digest
+        if: env.PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}-${{ inputs.tag }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    name: ${{ inputs.tag }} (manifest)
+
+    steps:
+      # github.repository_owner is mixed case (E3SM-Project) and image refs must be
+      # lowercase. metadata-action does this itself; a raw buildx ref does not.
+      - name: Lowercase image ref
+        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*-${{ inputs.tag }}
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ inputs.tag }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr,prefix=${{ inputs.tag }}-pr-
+            type=ref,event=branch,prefix=${{ inputs.tag }}-
+            type=match,pattern=${{ inputs.release_pattern }},group=1,prefix=${{ inputs.tag }}-
+          labels: |
+            org.opencontainers.image.description=${{ inputs.description }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(for f in *; do printf '%s@%s ' "$IMAGE" "$(cat "$f")"; done)

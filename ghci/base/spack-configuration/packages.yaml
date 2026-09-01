@@ -1,0 +1,17 @@
+packages:
+  # Special Exception: after installing a compiler, we will tell spack that ALL pkgs
+  # from now on must be built with the chosen downstream compiler. While Spack is smart
+  # enough to not rebuild the compiler itself (to avoid a cyclic dep), the new oneapi
+  # compilers have a pkg name (intel-oneapi-compilers) that DIFFERS from the compiler
+  # runtime name (oneapi).
+  # Spack won't catch that identity mismatch on its own and will attempt to rebuild
+  # intel-oneapi-compilers with oneapi. To prevent that loop, we force the compiler
+  # package to always safely bootstrap using the base system's gcc@11.5.0.
+  intel-oneapi-compilers:
+    require: "%gcc@11.5.0"
+  all:
+    permissions:
+      read: world
+      write: user
+    providers:
+      mpi: [mpich, openmpi, intel-oneapi-mpi]

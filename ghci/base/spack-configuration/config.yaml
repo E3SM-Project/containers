@@ -1,0 +1,6 @@
+config:
+  install_tree:
+    root: /spack-installs
+    projections:
+      ^mpi: "{name}/{version}/{compiler.name}/{compiler.version}/{^mpi.name}/{^mpi.version}/{hash:7}"
+      all: "{name}/{version}/{compiler.name}/{compiler.version}/base/{hash:7}"
