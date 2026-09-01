@@ -56,8 +56,9 @@ RUN microdnf -y --enablerepo=epel install \
         sudo \
         tar \
         unzip \
-        vi \
+        vim \
         wget \
+        which \
         xz \
     && microdnf clean all \
     && rm -rf /var/cache/dnf
