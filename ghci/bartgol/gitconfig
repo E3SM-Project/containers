@@ -1,0 +1,88 @@
+[user]
+  email = lbertag@sandia.gov
+  name = Luca Bertagna
+[pull]
+  ff = only
+[alias]
+  bkp   = !git add -A && git commit -m 'BKP: this commit will be amended/erased/rewritten'
+  bn    = !git rev-parse --abbrev-ref HEAD
+  ca    = commit --amend
+  call  = !git add -A && git commit -m
+  can   = commit --amend --no-edit
+  cm    = commit
+  cmb   = "!f() { git branch --merged | grep -vw master | xargs git branch -d; }; f"
+  cmm   = commit -m
+  co    = checkout
+  com   = !git checkout $(git remote show origin | awk '/HEAD branch:/ {print $3}')
+  cp    = cherry-pick
+  db    = branch -D
+  dh    = diff HEAD
+  dhp   = diff HEAD~1
+  dob   = "!: git branch; f() { git push origin :$1; }; f"
+  drb   = "!: git push; f() { git push $1 :$2; }; f"
+  ds    = diff --compact-summary
+  ffm   = merge --ff-only
+  ff    = !git rbn &> /dev/null && git ffm $(git rbn) || echo "no upstream set for branch: $(git bn)"
+  fp    = fetch -p
+  fpr   = "! : git push ; f() { git fetch origin +refs/pull/$1/head:refs/remotes/origin/pr/$1; }; f"
+  fprm  = "! : git push ; f() { git fetch origin +refs/pull/$1/merge:refs/remotes/origin/pr-merge/$1; }; f"
+  fprr  = "! : git push ; f() { git fetch $1 +refs/pull/$2/head:refs/remotes/$1/pr/$2; }; f"
+  fap   = fetch --all -p
+  fop   = fetch origin -p
+  last  = log -1
+  laste = log -1 --format=e
+  lg    = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold magenta)%d%C(reset)'
+  lgs   = "!: git branch ; git lg -10"
+  logo  = log --oneline
+  ls    = branch
+  lsv   = branch -vv
+  lsme  = !git ls --all | grep bartgol
+  mb    = branch -m
+  mcb   = "!f() { git branch -m $(git rev-parse --abbrev-ref HEAD) $1; }; f"
+  mob   = rebase @{u}
+  mom   = !git merge origin/$(git remote show origin | awk '/HEAD branch:/ {print $3}') --ff-only
+  mt    = mergetool
+  pb    = "!: git branch; f() { git push -u $1 HEAD; }; f"
+  po    = push origin
+  pob   = push -u origin HEAD
+  prb   = "!: git push ; f() { git push $1 $(git rev-parse --abbrev-ref HEAD); }; f"
+  pom   = !git push origin $(git remote show origin | awk '/HEAD branch:/ {print $3}')
+  ra    = rebase --abort
+  rbn   = !git rev-parse --abbrev-ref HEAD@{u} 2> /dev/null
+  rc    = rebase --continue
+  rh    = reset --hard
+  rhh   = reset --hard HEAD
+  ri    = rebase -i
+  rim   = "!f() { git rebase -i HEAD~$1; }; f"
+  rs    = rebase  --skip
+  rw    = reset HEAD~1
+  rwh   = reset --hard HEAD~1
+  rom   = !git rebase origin/$(git remote show origin | awk '/HEAD branch:/ {print $3}')
+  rob   = reset --hard @{upstream}
+  ss    = !git submodule sync --recursive
+  su    = !git submodule update --init --recursive
+  ssu   = !git ss && git su
+  alias = !git config --get-regexp ^alias\\. | sed -e s/^alias\\.// -e s/\\ /\\ =\\ /
+[commit]
+	gpgsign = true
+[url "git@github.com:"]
+  insteadOf = https://github.com/
+[push]
+  default = upstream
+[color]
+  ui = true
+[color "branch"]
+  upstream = cyan
+[merge]
+  tool = xxdiff
+[core]
+  excludesfile = ~/.gitignore
+	editor = ~/workdir/bin/vim
+[gpg]
+  program = gpg2
+[status]
+  relativePaths = true
+[checkout]
+	defaultRemote = origin
+[completion]
+	commands = -mergetool
