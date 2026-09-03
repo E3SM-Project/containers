@@ -1,0 +1,9 @@
+# Only the local buildcache. The public spack mirrors (https://binaries.spack.io/v0.23.1
+# and its e4s sub-mirror) would be free to add, but they would never hit: binary reuse
+# needs the os and compiler in the spec hash to match, and that index has no rhel9 builds
+# at all (ubuntu 18.04-24.04, amzn2, centos7) and no gcc@13.3.0. Adding them costs
+# metadata fetches on every install and buys nothing. If we want cross-build reuse, the
+# way to get it is to push our OWN buildcache -- spack can use an OCI registry such as
+# ghcr.io as a mirror -- not to point at the public one.
+mirrors:
+  local_system: file:///spack-buildcache

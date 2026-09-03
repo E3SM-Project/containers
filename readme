@@ -1,1 +1,33 @@
-Container recipes for the E3SM project
+# E3SM containers
+
+Container recipes for the E3SM project. Each top-level directory is one family of images,
+built and published to GHCR by the matching workflow in `.github/workflows/`.
+
+| Directory                                        | Image                                                  | What it is |
+|--------------------------------------------------|--------------------------------------------------------|------------|
+| [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-ghci`                       | Spack/UBI9 development and testing environments (`gnu-cpu-env`, `gnu-cuda-env`, `intel-cpu-env`, and a `-dev` variant of each). **Start here.** |
+| [`ghci-snl/`](ghci-snl/)                         | `ghcr.io/e3sm-project/e3sm-ghci-snl`                   | Frozen predecessor of `ghci/`; to be removed |
+
+## Conventions
+
+- **Software and data are separate.** Images carry a software stack; data gets mounted in.
+  This repo builds no data images: `inputdata` and `e3sm-diags-test-data` were removed, and
+  their existing packages on GHCR are frozen rather than deleted.
+- **One tag per image, no arch in the name.** Images supporting more than one architecture
+  are published as multi-arch manifest lists, so `podman pull <tag>` gets you the native
+  image for whatever machine you are on, and each arch is built natively rather than under
+  emulation. To force one, use `--platform linux/amd64` / `--platform linux/arm64`, not a
+  different tag. `.github/workflows/build-multiarch.yaml` implements this once for
+  everyone.
+- **Tag suffixes.** `<tag>` is what `main` publishes; `<tag>-pr-<N>` is a pull request
+  build; `<tag>-<version>` comes from a release tag such as `ghci-1.2.3`.
+- **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
+  `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
+  owned by root.
+- **Path-scoped workflows.** Each workflow only triggers on its own directory and its own
+  workflow file, so touching one image never rebuilds the others.
+
+Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: write`
+there), so those runs only build what can be validated without the registry.
+
+See [contributing](contributing) to add a new image.

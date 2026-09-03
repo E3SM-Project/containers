@@ -1,8 +1,194 @@
-The ghci container is mainly for testing on github actions
+# E3SM ghci containers
 
-Design notes
-- the container is based on spack/ubuntu-jammy:0.22.2
-- the container relies on binary cache to accelerate builds
-- the container is based on gcc 11, native to ubuntu 22.04 (jammy)
-- the container has mpich 4.2.1, likely incompatibile with craympich
-- the container houses within it (~10 GB of) data files from the inputdata server
+Development and testing environments for E3SM: a spack-built software stack on UBI9,
+runnable anywhere with podman or docker. Software only -- no input data is baked in; mount
+what you need.
+
+## Prerequisite: GitHub container registry (GHCR) authentication
+
+Our images are stored on GitHub's container registry. You must authenticate with GHCR before running `podman run` or `podman pull`:
+
+1. **Create a personal access token (PAT):**
+   - Go to your GitHub account **Settings > Developer settings > Personal access tokens**.
+   - Generate a token (Classic or Fine-grained) with the **`read:packages`** scope enabled (plus `write:packages` if you plan to push images).
+
+2. **Log in via podman:**
+   ```bash
+   podman login ghcr.io
+   ```
+
+## Quick start
+
+```bash
+podman run --rm -it \
+  -v /path/to/host/inputdata:/projects/e3sm/data/inputdata:z \
+  -v /path/to/host/baselines:/projects/e3sm/data/baselines:z \
+  ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+```
+
+The default command is already `bash --login`. A plain `/bin/bash` gives you a non-login
+shell, which skips `/etc/profile.d` and leaves you without the modules, `SPACK_ARCH`, or
+the python venv.
+
+## Available images
+
+Every image is published under a single, arch-independent tag. Each tag is a multi-arch
+manifest list holding a natively-built `x86_64` and `aarch64` image (no emulation), so
+`podman pull` resolves to whatever arch you are on and nothing here needs an arch in its
+name:
+
+| Tag                 | Arches          | Compiler | Notes                                                       |
+|---------------------|-----------------|----------|-------------------------------------------------------------|
+| `gnu-cpu-env`       | x86_64, aarch64 | GNU      | CPU-only stack; the aarch64 image runs well on Apple Silicon |
+| `gnu-cuda-env`      | x86_64, aarch64 | GNU      | CUDA stack: 12.4 on x86_64, 13.0 on aarch64, which targets NVIDIA "superchip" systems such as Grace Hopper/Blackwell |
+| `intel-cpu-env`     | x86_64          | Intel    | CPU-only stack (Intel oneAPI is x86_64-only)                 |
+| `<env>-dev`         | as above        | as above | Any of the above plus developer tooling; see below           |
+
+The intermediate stages these are built from are published the same way: `base`, and
+`gnu-13.3.0` / `intel-2024.1.0`.
+
+To pull a specific arch on a host of the other arch (under emulation), ask for the
+platform rather than a different tag:
+
+```bash
+podman pull --platform linux/arm64 ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+```
+
+## The `-dev` images
+
+`<env>-dev` is the matching env plus the things you want when you actually work inside the
+container rather than just run tests in it:
+
+- **Coding agents:** `claude`, `codex`, `copilot`, `opencode`
+- **Python tooling:** `uv` (and `uvx`)
+- **Build loop:** `ccache`, `ninja`, `gdb`, `strace`
+- **Shell/CLI:** `gh`, vim, nano, `screen`, `ripgrep`, `fzf`, `tig`, `bat`, `ncdu`,
+  `git-lfs`, bash completion, a git-aware prompt, sensible history settings
+- **Node** (upstream build, since the UBI9 package is EOL node 16), so `npm i -g` works
+
+Each agent and `uv` is installed from its own upstream installer into `$HOME`, as the
+`e3sm` user, so they self-update inside a running container with no root and no rebuild:
+
+```bash
+uv self update
+claude update
+opencode upgrade
+codex --upgrade
+copilot --version   # self-updates on run
+```
+
+They start you in `/projects/e3sm/work`, also linked at `~/work`, which is on the same
+tree as the data mounts, so a clone there is easy to bind-mount out.
+
+`tmux`, `htop` and `tree` are in neither the UBI9 package subset nor EPEL9; `screen` is
+the multiplexer that is available.
+
+### Using it as a devcontainer
+
+`devcontainer.json.example` in `ghci/dev/` is a working starting point to copy into a
+repo's `.devcontainer/`. The one thing that will bite you if you write your own: the entire
+environment (modules, `SPACK_ARCH`, the venv) lives in `/etc/profile.d`, which only a
+**login** shell sources. So set `"userEnvProbe": "loginInteractiveShell"`, give the
+integrated terminal a `bash -l` profile, and wrap lifecycle hooks -- which run under
+`sh -c` -- in `e3sm-env`:
+
+```jsonc
+"postCreateCommand": "e3sm-env git submodule update --init --recursive"
+```
+
+`e3sm-env <cmd>` runs a command with the full login environment from a context that has
+none. Without it, `postCreateCommand` cannot find a compiler.
+
+**Credentials.** `git push` over SSH needs no setup: VS Code forwards your ssh-agent, and
+the `-dev` images drop the base image's `git@github.com:` -> HTTPS rewrite (which exists so
+CI can fetch submodules anonymously, but would otherwise override an SSH remote and prompt
+for a password). For `gh` and the agent CLIs, pick one of the two mount blocks in the
+example: empty named volumes and log in once inside (nothing from the host is exposed), or
+bind your host config dirs for a working-on-first-launch setup -- at the cost of every
+process in the container, agents included, being able to read those credentials. Note that
+`gh`, `codex`, `copilot` and `opencode` keep their credentials in files, so bind-mounting
+those works. Claude Code on macOS keeps its token in the **Keychain**, so it cannot be
+mounted in -- log in once inside and the `~/.claude` volume keeps it across rebuilds.
+
+## The default user
+
+The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
+
+- MPI implementations refuse to run as root, so this removes the usual `--userns=keep-id`
+  dance and the `mpirun` workarounds.
+- Files written into bind mounts come back owned by uid 1000, which is the first user on
+  most Linux hosts, so ownership usually lines up with no extra flags.
+- If your host uid differs, `podman run --userns=keep-id` still works, and
+  `--user root` gets you a root shell if you need one.
+
+Build stages run as root; only the final and `-dev` images switch to `e3sm`.
+
+## Important storage & permission guidelines
+
+- **Input data** (`inputdata`): mount it at `/projects/e3sm/data/inputdata`. The `e3sm`
+  user owns `/projects/e3sm`, so downloads into it work without root.
+- **Baselines** (`baselines`): optional; omit the mount if you are not comparing against
+  baselines.
+- **SELinux** (`:z`): on an SELinux-enforced host (RHEL, Fedora), append `:z` to volume
+  mounts so podman relabels them.
+
+## Python environment & custom packages
+
+The container comes pre-configured with a virtual environment named `eamxx-venv`, activated
+at login. Extra packages can be installed on the fly:
+
+```bash
+pip install <package-name>
+```
+
+They persist for the life of the container, which is disposable by design.
+
+## Manually rebuilding the stack
+
+To test a different compiler or library version, rebuild locally. Each stage builds for the
+arch you are on; there is no arch build arg to set.
+
+```bash
+podman build --tag e3sm-base ghci/base/
+
+podman build \
+  --build-arg BASE_IMAGE=localhost/e3sm-base \
+  --build-arg BASE_TAG=latest \
+  --build-arg COMPILER=gcc \
+  --build-arg COMPILER_VERSION=14.1.0 \
+  --tag e3sm-compiler:gcc-14.1.0 \
+  ghci/compiler/
+
+podman build \
+  --build-arg BASE_IMAGE=localhost/e3sm-compiler \
+  --build-arg BASE_TAG=gcc-14.1.0 \
+  --build-arg WITH_MOAB=yes \
+  --tag e3sm-env:gnu-cpu-env-gcc14 \
+  ghci/final/
+```
+
+## How the images are put together
+
+`base` -> `<compiler>-<version>` -> `<compiler>-<backend>-env` -> `<env>-dev`, each stage
+building `FROM` the tag the previous one published. That is four Dockerfiles, not one per
+variant: `ghci/final/Dockerfile` builds every env from build args (MPI, LAPACK, CUDA,
+MOAB, debug tools, torch flavor), and the variant list is the `final-env` matrix in
+`.github/workflows/ghci.yaml`. `ghci/dev/Dockerfile` is likewise one recipe for all the
+`-dev` images.
+
+Packages that depend only on the compiler -- cmake, yaml-cpp, boost -- are built in the
+compiler stage, so the envs sharing a compiler share them instead of each rebuilding cmake
+from source.
+
+Nothing here is parameterized by arch. `base` writes `SPACK_ARCH=linux-rhel9-$(uname -m)`
+into `/etc/profile.d/spack-arch.sh` at build time, so every stage picks up the right
+target on its own (profile.d rather than `ENV`, since `ENV` cannot be computed at build
+time -- hence the `bash --login` CMD and the `bash -lc` SHELL). CI builds each arch
+natively, pushes by digest, and merges the digests into one manifest list per tag; see
+`.github/workflows/build-multiarch.yaml`.
+
+## Relationship to `ghci-snl`
+
+These recipes started life as `ghci-snl/`, which is now frozen and will be removed. There
+is nothing SNL-specific in them, and nothing tied to GitHub Actions either -- they run
+anywhere.
