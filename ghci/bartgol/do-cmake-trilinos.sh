@@ -1,5 +1,6 @@
-SRC_DIR=${WORK_DIR}/trilinos/trilinos-src/develop
-INSTALL_DIR=${WORK_DIR}/trilinos/trilinos-install/${HOST}/${COMPILER}/sacado/release
+WORK_DIR=/projects/e3sm/software
+SRC_DIR=${WORK_DIR}/trilinos/source
+INSTALL_DIR=${WORK_DIR}/trilinos/install
 
 rm -rf CMakeFiles
 rm -f  CMakeCache.txt
