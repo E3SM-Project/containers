@@ -73,9 +73,12 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 RUN source /spack/share/spack/setup-env.sh && \
     spack install ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
 
-# I/O libraries
+# I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first, so
+# without it these would only match the MPI above by virtue of spack reusing it.
+# NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install hdf5 netcdf-c+mpi netcdf-fortran parallel-netcdf %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
+    on="%${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC}" && \
+    spack install hdf5 $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on
 
 # MOAB's "zoltan" TPL, as fetched by the vendor install-bootstrap.sh script further down
 # from its default (circa-2013) dist tarball mirror, ships a bundled config.guess/
@@ -161,6 +164,16 @@ RUN rm -rf /spack-buildcache && \
 RUN microdnf install -y perl && \
     microdnf clean all && \
     rm -rf /var/cache/dnf
+
+# The basics for debugging inside the same image the tests run in. Here rather than in the
+# base image, which would force the compiler stages to rebuild for four small packages.
+RUN microdnf -y --enablerepo=epel install \
+        less \
+        nano \
+        screen \
+        zip \
+    && microdnf clean all \
+    && rm -rf /var/cache/dnf
 
 # Install MOAB
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \

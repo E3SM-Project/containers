@@ -33,9 +33,9 @@ the python venv.
 ## Available images
 
 Every image is published under a single, arch-independent tag. Each tag is a multi-arch
-manifest list holding a natively-built `x86_64` and `aarch64` image (no emulation), so
+manifest list holding a natively-built image (no emulation) for each arch listed below, so
 `podman pull` resolves to whatever arch you are on and nothing here needs an arch in its
-name:
+name. The Intel images are `x86_64` only:
 
 | Tag                 | Arches          | Compiler | Notes                                                       |
 |---------------------|-----------------|----------|-------------------------------------------------------------|
@@ -43,6 +43,9 @@ name:
 | `gnu-cuda-env`      | x86_64, aarch64 | GNU      | CUDA stack: 12.4 on x86_64, 13.0 on aarch64, which targets NVIDIA "superchip" systems such as Grace Hopper/Blackwell |
 | `intel-cpu-env`     | x86_64          | Intel    | CPU-only stack (Intel oneAPI is x86_64-only)                 |
 | `<env>-dev`         | as above        | as above | Any of the above plus developer tooling; see below           |
+
+Every env image also carries `less`, `nano`, `screen` and `zip`, so a shell in the image
+the tests run in is usable for debugging.
 
 The intermediate stages these are built from are published the same way: `base`, and
 `gnu-13.3.0` / `intel-2024.1.0`.
@@ -62,7 +65,7 @@ container rather than just run tests in it:
 - **Coding agents:** `claude`, `codex`, `copilot`, `opencode`
 - **Python tooling:** `uv` (and `uvx`)
 - **Build loop:** `ccache`, `ninja`, `gdb`, `strace`
-- **Shell/CLI:** `gh`, vim, nano, `screen`, `ripgrep`, `fzf`, `tig`, `bat`, `ncdu`,
+- **Shell/CLI:** `gh`, vim, `ripgrep`, `fzf`, `tig`, `bat`, `ncdu`,
   `git-lfs`, bash completion, a git-aware prompt, sensible history settings
 - **Node** (upstream build, since the UBI9 package is EOL node 16), so `npm i -g` works
 
@@ -120,6 +123,10 @@ The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
   most Linux hosts, so ownership usually lines up with no extra flags.
 - If your host uid differs, `podman run --userns=keep-id` still works, and
   `--user root` gets you a root shell if you need one.
+- At the labs your uid is usually not 1000, and shared inputdata/baselines are reachable
+  through a group instead. Hand that group to the container: with docker,
+  `--group-add $(stat -c %g /path/to/baselines)`; with rootless podman, whose user
+  namespace does not map host gids, `--group-add keep-groups`.
 
 Build stages run as root; only the final and `-dev` images switch to `e3sm`.
 

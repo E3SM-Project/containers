@@ -28,6 +28,7 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
   workflow file, so touching one image never rebuilds the others.
 
 Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: write`
-there), so those runs only build what can be validated without the registry.
+there), so those runs build every stage as validation only, each one FROM the image `main`
+published rather than the one the previous stage just built.
 
 See [contributing](contributing) to add a new image.
