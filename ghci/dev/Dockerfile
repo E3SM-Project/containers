@@ -10,14 +10,12 @@ ENV E3SM_ENV=${VARIANT}
 USER root
 
 # Editors and the usual navigation tools
+# (less, nano, screen and zip come from the env image)
 RUN microdnf -y install \
         bash-completion \
-        less \
         man-db \
-        nano \
         openssh-clients \
         vim-enhanced \
-        zip \
     && microdnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -39,7 +37,6 @@ RUN microdnf -y --enablerepo=epel install \
         git-lfs \
         ncdu \
         ripgrep \
-        screen \
         tig \
     && microdnf clean all \
     && rm -rf /var/cache/dnf

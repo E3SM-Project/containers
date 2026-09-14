@@ -82,7 +82,13 @@ jobs:
                 continue;
               }
 
-              const toDelete = versions.filter(v => (v.metadata?.container?.tags || []).some(t => tagRe.test(t)));
+              // A version can carry several tags: a fully cached PR build is byte-identical to
+              // main's, so one digest may hold both `base` and `base-pr-N`. Deleting it would take
+              // the main tag down too, so only delete versions no other tag still points at.
+              const toDelete = versions.filter(v => {
+                const tags = v.metadata?.container?.tags || [];
+                return tags.length > 0 && tags.every(t => tagRe.test(t));
+              });
               core.info(`${package_name}: found ${toDelete.length} version(s) to delete for PR #${pr}`);
 
               for (const v of toDelete) {

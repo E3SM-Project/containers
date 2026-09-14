@@ -28,7 +28,39 @@ concurrency:
 # base -> <compiler>-<version> -> <compiler>-<backend>-env -> ...-dev, each stage building
 # FROM the arch-independent tag the previous one published. See build-multiarch.yaml.
 jobs:
+  # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
+  # stage builds FROM the image the previous stage just published rather than main's:
+  # -pr-<N> on a PR, -<version> on a ghci-<version> tag, -<branch> on a non-main dispatch.
+  # A fork PR publishes nothing, so its stages build FROM main's images instead.
+  suffix:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.suffix.outputs.value }}
+    steps:
+      - id: suffix
+        env:
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = pull_request ] && [ "$FORK" = true ]; then
+            value=""
+          elif [ "$EVENT" = pull_request ]; then
+            value="-pr-$PR"
+          elif [ "$REF_TYPE" = tag ]; then
+            value="-${REF_NAME#ghci-}"
+          elif [ "$REF_NAME" != main ]; then
+            # metadata-action's sanitization of branch names
+            value="-$(sed 's/[^a-zA-Z0-9._-]/-/g' <<< "$REF_NAME")"
+          else
+            value=""
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
   base:
+    needs: suffix
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
       contents: read
@@ -38,11 +70,10 @@ jobs:
       image_name: e3sm-ghci
       tag: base
       context: ghci/base
-      fork_safe: true
       description: Base image for E3SM ghci containers
 
   compiler:
-    needs: base
+    needs: [suffix, base]
     name: ${{ matrix.compiler }}
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -71,11 +102,11 @@ jobs:
       build_args: |
         COMPILER=${{ matrix.spack_compiler }}
         COMPILER_VERSION=${{ matrix.version }}
-        BASE_TAG=base${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+        BASE_TAG=base${{ needs.suffix.outputs.value }}
 
   # The variant list: one context (ghci/final), one set of build args per env.
   final-env:
-    needs: compiler
+    needs: [suffix, compiler]
     name: ${{ matrix.env }}
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -124,11 +155,11 @@ jobs:
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} image for E3SM testing and development
       build_args: |
-        BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+        BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ needs.suffix.outputs.value }}
         ${{ matrix.args }}
 
   dev:
-    needs: final-env
+    needs: [suffix, final-env]
     name: ${{ matrix.env }}-dev
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -152,5 +183,5 @@ jobs:
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} plus developer tooling
       build_args: |
-        BASE_TAG=${{ matrix.env }}${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
+        BASE_TAG=${{ matrix.env }}${{ needs.suffix.outputs.value }}
         VARIANT=${{ matrix.env }}
