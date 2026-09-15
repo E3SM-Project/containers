@@ -1,0 +1,94 @@
+name: ci
+
+# The root workflow: it owns every trigger that needs a required status check (PR, push to
+# main, merge queue, manual dispatch) and fans out to one job per constituent CI workflow,
+# each invoked as a reusable workflow (`uses: ./...`) rather than as an independently
+# triggered workflow. Adding a new CI workflow means adding one filter entry and one calling
+# job here -- it never needs its own triggers, its own path filtering, or its own required
+# check.
+#
+# Path filtering happens here (the `changes` job) rather than as a trigger-level `paths:`
+# filter on each constituent workflow. A trigger-level filter makes GitHub skip scheduling a
+# workflow run entirely, which means a PR touching only unrelated files never gets a check run
+# for that workflow's jobs at all -- and a required status check that was never requested
+# blocks merging forever. `required-check` below is unconditional (`if: always()`), so it
+# always posts a conclusion, whether or not any constituent workflow actually ran, and that's
+# the one check branch protection / the merge queue should require.
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, ready_for_review, reopened]
+  push:
+    branches: [ main ]
+    tags:
+      - 'ghci-*'
+
+  merge_group:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # merge_group can't use path filters at the trigger level (a GitHub limitation), a
+  # workflow_dispatch run is a deliberate manual request, and a ghci-* tag can point at a
+  # commit that itself touches nothing ghci-related (the filter would then see no diff and
+  # skip the release build) -- all three are always treated as relevant. Every other event
+  # only builds a given constituent workflow when its own relevant files changed.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # dorny/paths-filter fetches the changed-file list from the REST API on pull_request
+      # events (not from local git diff, even with checkout done first), so it needs read
+      # access to the PR itself.
+      pull-requests: read
+    outputs:
+      ghci: ${{ steps.filter.outputs.ghci || steps.force.outputs.ghci }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'merge_group' && github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
+        with:
+          filters: |
+            ghci:
+              - 'ghci/**'
+              - '.github/workflows/ci.yaml'
+              - '.github/workflows/ghci.yaml'
+              - '.github/workflows/build-multiarch.yaml'
+      - id: force
+        if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+        run: echo "ghci=true" >> "$GITHUB_OUTPUT"
+
+  ghci:
+    needs: changes
+    if: needs.changes.outputs.ghci == 'true'
+    uses: ./.github/workflows/ghci.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+  # The one job to mark as a required status check / merge-queue check, covering every
+  # constituent workflow above. It always runs (`if: always()`) and only fails if a needed
+  # job actually failed or was cancelled -- a job the `changes` filter caused to be skipped is
+  # not a failure. This is what makes a docs-only PR mergeable: no constituent workflow even
+  # gets invoked, but this job still posts a conclusion, so the required check is never left
+  # permanently "Expected".
+  required-check:
+    name: required-check
+    needs: [changes, ghci]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no job failed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "Job results: $RESULTS"
+          echo "$RESULTS" | jq -e 'all(.[]; . == "success" or . == "skipped")'

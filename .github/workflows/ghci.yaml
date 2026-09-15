@@ -1,32 +1,18 @@
 name: ghci
 
+# Triggered exclusively through ci.yaml's `ghci` job (as a reusable workflow), which owns the
+# real triggers, the path filtering, and the required status check spanning all CI workflows.
+# workflow_dispatch is kept here too so a maintainer can force a full rebuild of just this
+# pipeline from the Actions UI without going through ci.yaml.
 on:
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - 'ghci/**'
-      - '.github/workflows/ghci.yaml'
-      - '.github/workflows/build-multiarch.yaml'
-  push:
-    branches: [ main ]
-    paths:
-      - 'ghci/**'
-      - '.github/workflows/ghci.yaml'
-      - '.github/workflows/build-multiarch.yaml'
-    tags:
-      - 'ghci-*'
-
-  # merge_group does not support path filters, so this always runs for every queued merge;
-  # see the suffix job below for how it builds FROM main's images without publishing anything.
-  merge_group:
-    branches: [ main ]
-
+  workflow_call:
   workflow_dispatch:
 
-# Cancel in-progress runs for the same PR or branch
+# Cancel in-progress runs for the same branch when dispatched standalone. When invoked via
+# ci.yaml's `uses:`, this workflow's jobs run inside ci.yaml's own run and are governed by
+# ci.yaml's concurrency group instead.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # base -> <compiler>-<version> -> <compiler>-<backend>-env -> ...-dev, each stage building
