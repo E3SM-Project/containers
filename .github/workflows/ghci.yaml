@@ -17,6 +17,11 @@ on:
     tags:
       - 'ghci-*'
 
+  # merge_group does not support path filters, so this always runs for every queued merge;
+  # see the suffix job below for how it builds FROM main's images without publishing anything.
+  merge_group:
+    branches: [ main ]
+
   workflow_dispatch:
 
 # Cancel in-progress runs for the same PR or branch
@@ -30,7 +35,8 @@ jobs:
   # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
   # stage builds FROM the image the previous stage just published rather than main's:
   # -pr-<N> on a PR, -<version> on a ghci-<version> tag, -<branch> on a non-main dispatch.
-  # A fork PR publishes nothing, so its stages build FROM main's images instead.
+  # A fork PR, or a merge_group run, publishes nothing, so its stages build FROM main's
+  # images instead.
   suffix:
     runs-on: ubuntu-latest
     outputs:
@@ -44,7 +50,9 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT" = pull_request ] && [ "$FORK" = true ]; then
+          if [ "$EVENT" = merge_group ]; then
+            value=""
+          elif [ "$EVENT" = pull_request ] && [ "$FORK" = true ]; then
             value=""
           elif [ "$EVENT" = pull_request ]; then
             value="-pr-$PR"

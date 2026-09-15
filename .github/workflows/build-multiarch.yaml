@@ -41,8 +41,9 @@ on:
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
   # A fork PR gets no packages:write, so nothing can be pushed and there is nothing to merge:
-  # it still builds every stage, as validation, FROM the images main published.
-  PUSH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+  # it still builds every stage, as validation, FROM the images main published. A merge_group
+  # run is likewise validation-only: it must never publish images under the queue's throwaway ref.
+  PUSH: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
 
 jobs:
   build:
@@ -117,7 +118,7 @@ jobs:
 
   merge:
     needs: build
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
