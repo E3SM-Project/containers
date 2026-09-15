@@ -46,7 +46,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 # LAPACK provider. yaml-cpp, cmake and boost come from the compiler image, which every
 # env shares, so they are not rebuilt here.
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack install --fail-fast ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
     spack gc -y && \
     spack clean -a
 
@@ -59,7 +59,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "skipping CUDA"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install cuda@12.4.0 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+      spack install --fail-fast cuda@12.4.0 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
       spack gc -y && \
       spack clean -a; \
     else \
@@ -75,7 +75,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 
 # MPI
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack install --fail-fast ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
     spack gc -y && \
     spack clean -a
 
@@ -84,7 +84,7 @@ RUN source /spack/share/spack/setup-env.sh && \
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
 RUN source /spack/share/spack/setup-env.sh && \
     on="%${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC}" && \
-    spack install hdf5 $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
+    spack install --fail-fast hdf5 $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
     spack gc -y && \
     spack clean -a
 
@@ -102,7 +102,7 @@ RUN source /spack/share/spack/setup-env.sh && \
 # recipe simple: on x86_64 the vendor script would have built the same thing.
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC} && \
+      spack install --fail-fast --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC} && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
       ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC})" /projects/e3sm/software/moab/tpls/zoltan && \
       spack gc -y && \
@@ -112,7 +112,7 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
 # Debugging libs
 RUN if [ -n "${DEBUG_SPECS}" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install ${DEBUG_SPECS} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+      spack install --fail-fast ${DEBUG_SPECS} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
       spack gc -y && \
       spack clean -a; \
     fi
