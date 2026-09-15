@@ -90,9 +90,14 @@ jobs:
           file: ${{ inputs.context }}/Dockerfile
           build-args: ${{ inputs.build_args }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=${{ env.PUSH }},name-canonical=true,push=${{ env.PUSH }}
-          cache-from: type=gha,scope=${{ inputs.tag }}-${{ matrix.arch }}
-          cache-to: type=gha,scope=${{ inputs.tag }}-${{ matrix.arch }},mode=max,ignore-error=true
-
+          # Registry cache (one tag per compiler/env x arch, same as the images themselves) rather than
+          # actions/cache: the latter is scoped per-branch and shares a repo-wide 10GB/7-day eviction
+          # budget across every open PR, so a PR's own cache writes routinely evict main's (or each
+          # other's) entries and the next build starts from scratch. A registry tag has no such quota
+          # and isn't branch-scoped, so PRs and main naturally share it. Skipped on cache-to for fork
+          # PRs, which can't push; they still read whatever main last published.
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache-${{ inputs.tag }}-${{ matrix.arch }}
+          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache-{1}-{2},mode=max,ignore-error=true', env.IMAGE, inputs.tag, matrix.arch) || '' }}
       - name: Export digest
         if: env.PUSH == 'true'
         run: |
