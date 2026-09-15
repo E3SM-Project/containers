@@ -62,11 +62,19 @@ RUN set -euo pipefail && \
       'export NPM_CONFIG_PREFIX=$HOME/.npm-global' \
       'export PATH=/opt/node/bin:$HOME/.npm-global/bin:$PATH' > /etc/profile.d/node.sh
 
-# GitHub CLI, from GitHub's own el9 repo (x86_64 and aarch64)
-RUN curl -fsSL https://cli.github.com/packages/rpm/gh-cli.repo -o /etc/yum.repos.d/gh-cli.repo && \
-    microdnf install -y gh && \
-    microdnf clean all && \
-    rm -rf /var/cache/dnf
+# GitHub CLI. The el9 repo up from GitHub's own el9 repo (x86_64 and aarch64)
+# upgraded gh to a versin that requires OpenPGP v6, which is NOT supported on rhel9.
+# Hence, just fetch pre-compiled binaries instead.
+RUN ARCH=$(uname -m) && \
+    case "${ARCH}" in \
+      x86_64)  GH_ARCH="amd64" ;; \
+      aarch64) GH_ARCH="arm64" ;; \
+      *)       echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac && \
+    GH_VERSION="2.101.0" && \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" -o gh.tar.gz && \
+    tar -xzf gh.tar.gz --strip-components=1 -C /usr/local && \
+    rm gh.tar.gz
 
 # Shell ergonomics. Loaded last so it wins over the env setup from the stages below.
 RUN printf '%s\n' \
