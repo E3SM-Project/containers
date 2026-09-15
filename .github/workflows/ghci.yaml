@@ -29,18 +29,26 @@ concurrency:
 # `required-check` is unconditional (`if: always()`) it posts a conclusion on every run, so
 # branch protection / the merge queue always has something to wait on.
 jobs:
-  # merge_group can't use path filters at the trigger level (a GitHub limitation), and a
-  # workflow_dispatch run is a deliberate manual request, so both are always treated as
-  # relevant; every other event only builds when ghci-relevant files changed.
+  # merge_group can't use path filters at the trigger level (a GitHub limitation), a
+  # workflow_dispatch run is a deliberate manual request, and a ghci-* tag can point at a
+  # commit that itself touches nothing ghci-related (the filter would then see no diff and
+  # skip the release build) -- all three are always treated as relevant. Every other event
+  # only builds when ghci-relevant files changed.
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # dorny/paths-filter fetches the changed-file list from the REST API on pull_request
+      # events (not from local git diff, even though we've already checked out), so it needs
+      # read access to the PR itself.
+      pull-requests: read
     outputs:
       relevant: ${{ steps.filter.outputs.relevant || steps.force.outputs.relevant }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
-        if: github.event_name != 'merge_group' && github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'merge_group' && github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
         with:
           filters: |
             relevant:
@@ -48,7 +56,7 @@ jobs:
               - '.github/workflows/ghci.yaml'
               - '.github/workflows/build-multiarch.yaml'
       - id: force
-        if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: echo "relevant=true" >> "$GITHUB_OUTPUT"
 
   # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
