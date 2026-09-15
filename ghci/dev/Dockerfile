@@ -29,8 +29,9 @@ RUN microdnf -y install \
 
 # Interactive tools from EPEL, which the base image ships disabled.
 # NOTE: tmux, htop and tree are in neither the UBI9 subset nor EPEL9; screen is the
-# available multiplexer.
+# available multiplexer. Instead of htop, we use btop (also quite nice)
 RUN microdnf -y --enablerepo=epel install \
+        btop \
         bat \
         ccache \
         fzf \
