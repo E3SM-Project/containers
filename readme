@@ -6,7 +6,6 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 | Directory                                        | Image                                                  | What it is |
 |--------------------------------------------------|--------------------------------------------------------|------------|
 | [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-ghci`                       | Spack/UBI9 development and testing environments (`gnu-cpu-env`, `gnu-cuda-env`, `intel-cpu-env`, and a `-dev` variant of each). **Start here.** |
-| [`ghci-snl/`](ghci-snl/)                         | `ghcr.io/e3sm-project/e3sm-ghci-snl`                   | Frozen predecessor of `ghci/`; to be removed |
 
 ## Conventions
 

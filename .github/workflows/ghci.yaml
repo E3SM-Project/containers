@@ -16,7 +16,6 @@ on:
       - '.github/workflows/build-multiarch.yaml'
     tags:
       - 'ghci-*'
-      - '!ghci-snl-*'
 
   workflow_dispatch:
 
