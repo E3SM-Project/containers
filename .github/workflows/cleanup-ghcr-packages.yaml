@@ -17,7 +17,7 @@ on:
       hours_old:
         description: 'Minimum age (in hours) of untagged images to delete'
         required: true
-        default: '24'
+        default: '48'
         type: number
 
 env:
@@ -113,7 +113,7 @@ jobs:
             const package_type = 'container';
 
             const inputHours = context.payload.inputs?.hours_old;
-            const minHours = inputHours !== undefined ? parseFloat(inputHours) : 24;
+            const minHours = inputHours !== undefined ? parseFloat(inputHours) : 48;
             core.info(`Targeting untagged images older than ${minHours} hours.`);
 
             // The per-arch images a multi-arch tag points at are themselves UNTAGGED package
