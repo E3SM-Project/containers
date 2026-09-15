@@ -32,7 +32,7 @@ RUN source /spack/share/spack/setup-env.sh && \
 
 #Install the compiler we want using spack
 RUN source /spack/share/spack/setup-env.sh && source /etc/profile.d/compiler_name.sh && \
-    spack install ${COMPILER_MODULE_NAME}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack install --fail-fast ${COMPILER_MODULE_NAME}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
     if [ "${COMPILER}" = "oneapi" ]; then \
         echo "Stripping unused FPGA components to satisfy security scanners..." && \
         COMPILER_ROOT="$(spack location -i ${COMPILER_MODULE_NAME}@${COMPILER_VERSION})" && \
@@ -77,13 +77,13 @@ RUN source /spack/share/spack/setup-env.sh && \
 # the system ones and break rpm/microdnf TLS. The env images load them at the end, once
 # the package-manager steps are done.
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install yaml-cpp cmake boost %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack install --fail-fast yaml-cpp cmake boost %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
     spack gc -y && \
     spack clean -a
 
 # Install python, setup virtual env, and install common pip packages
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install --fresh python@3.11 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack install --fail-fast --fresh python@3.11 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
     spack gc -y && \
     spack clean -a
 RUN echo "module load python" >> /etc/profile.d/eamxx-env.sh
