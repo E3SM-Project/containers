@@ -103,7 +103,7 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Delete Old Untagged Remnants
+      - name: Delete Old Untagged/Buildcache Remnants
         uses: actions/github-script@v7
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -114,7 +114,7 @@ jobs:
 
             const inputHours = context.payload.inputs?.hours_old;
             const minHours = inputHours !== undefined ? parseFloat(inputHours) : 48;
-            core.info(`Targeting untagged images older than ${minHours} hours.`);
+            core.info(`Targeting untagged images and stale buildcache tags older than ${minHours} hours.`);
 
             // The per-arch images a multi-arch tag points at are themselves UNTAGGED package
             // versions, so deleting untagged versions by age would break every multi-arch
@@ -154,10 +154,18 @@ jobs:
               }
               core.info(`${package_name}: ${versions.length} version(s) retrieved`);
 
-              const tagged = versions.filter(v => (v.metadata?.container?.tags || []).length > 0);
-              const inUse = new Set(tagged.map(v => v.name));
+              const tags = v => v.metadata?.container?.tags || [];
+              // buildcache-* tags are disposable build-cache manifests, not release artifacts. If a
+              // stage/arch combo stops being built, its tag never moves again and the cache manifest
+              // (often large, since it's pushed with mode=max) would otherwise survive forever, since
+              // the age check below normally only ever considers untagged versions.
+              const isStaleCacheCandidate = v => tags(v).length > 0 && tags(v).every(t => t.startsWith('buildcache-'));
+
+              const tagged = versions.filter(v => tags(v).length > 0);
+              const inUse = new Set(tagged.filter(v => !isStaleCacheCandidate(v)).map(v => v.name));
               let resolvable = true;
               for (const v of tagged) {
+                if (isStaleCacheCandidate(v)) continue; // single-arch cache manifest, not a multi-arch index
                 try {
                   for (const d of await referencedDigests(package_name, v.name)) inUse.add(d);
                 } catch (e) {
@@ -170,11 +178,11 @@ jobs:
 
               const now = new Date();
               const toDelete = versions.filter(v => {
-                if ((v.metadata?.container?.tags || []).length > 0) return false;
+                if (tags(v).length > 0 && !isStaleCacheCandidate(v)) return false;
                 if (inUse.has(v.name)) return false;
                 return (now - new Date(v.created_at)) / 36e5 > minHours;
               });
-              core.info(`${package_name}: ${toDelete.length} untagged version(s) match, ${inUse.size} digest(s) in use`);
+              core.info(`${package_name}: ${toDelete.length} version(s) match (untagged or stale buildcache tag), ${inUse.size} digest(s) in use`);
 
               for (const v of toDelete) {
                 try {
@@ -182,7 +190,7 @@ jobs:
                     'DELETE /orgs/{org}/packages/{package_type}/{package_name}/versions/{package_version_id}',
                     { org, package_type, package_name, package_version_id: v.id }
                   );
-                  core.info(`Deleted ${package_name} untagged version id=${v.id}`);
+                  core.info(`Deleted ${package_name} version id=${v.id} tags=${tags(v).join(',')}`);
                 } catch (deleteError) {
                   core.warning(`Failed to delete ${package_name} version id=${v.id}: ${deleteError.message}`);
                 }
