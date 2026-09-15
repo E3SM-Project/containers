@@ -190,8 +190,9 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       cd /tmp/e3sm && git submodule update --init cime && \
       curl -fsSL "https://bitbucket.org/fathomteam/moab/raw/vijaysm/automated-build-scripts/install/install-bootstrap.sh?cb=$RANDOM" > /tmp/install-bootstrap.sh && \
       chmod u+x /tmp/install-bootstrap.sh && \
-      LDFLAGS="-L$HDF5_ROOT/lib" /tmp/install-bootstrap.sh         \
+      LDFLAGS="-L$HDF5_ROOT/lib" /tmp/install-bootstrap.sh        \
           --profile=e3sm                                          \
+          --no-static                                             \
           --e3sm-root=/tmp/e3sm                                   \
           --hdf5-root=$HDF5_ROOT                                  \
           --netcdf-root=$NETCDF_C_ROOT                            \
