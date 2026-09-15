@@ -162,10 +162,13 @@ jobs:
               const isStaleCacheCandidate = v => tags(v).length > 0 && tags(v).every(t => t.startsWith('buildcache-'));
 
               const tagged = versions.filter(v => tags(v).length > 0);
+              // A buildcache tag isn't pushed with image-manifest=true, so it can itself be an OCI
+              // index referencing several untagged config/layer blobs used for cache import. Still
+              // resolve it like any other tagged manifest so those children stay protected while the
+              // tag is live; only its own digest is excluded from inUse so the tag can expire once stale.
               const inUse = new Set(tagged.filter(v => !isStaleCacheCandidate(v)).map(v => v.name));
               let resolvable = true;
               for (const v of tagged) {
-                if (isStaleCacheCandidate(v)) continue; // single-arch cache manifest, not a multi-arch index
                 try {
                   for (const d of await referencedDigests(package_name, v.name)) inUse.add(d);
                 } catch (e) {
