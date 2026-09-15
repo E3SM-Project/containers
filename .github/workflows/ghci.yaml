@@ -8,11 +8,13 @@ on:
   workflow_call:
   workflow_dispatch:
 
-# Cancel in-progress runs for the same branch when dispatched standalone. When invoked via
-# ci.yaml's `uses:`, this workflow's jobs run inside ci.yaml's own run and are governed by
-# ci.yaml's concurrency group instead.
+# Cancel in-progress runs for the same ref. The group name is hardcoded rather than built
+# from `github.workflow`: inside a called reusable workflow, `github.workflow` resolves to
+# the *caller's* name (`ci`, once invoked from ci.yaml), not `ghci` -- using it here would
+# collide with ci.yaml's own top-level concurrency group and let this workflow cancel the very
+# run it's part of, taking `required-check` down with it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ghci-${{ github.ref }}
   cancel-in-progress: true
 
 # base -> <compiler>-<version> -> <compiler>-<backend>-env -> ...-dev, each stage building

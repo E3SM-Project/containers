@@ -3,9 +3,8 @@ name: ci
 # The root workflow: it owns every trigger that needs a required status check (PR, push to
 # main, merge queue, manual dispatch) and fans out to one job per constituent CI workflow,
 # each invoked as a reusable workflow (`uses: ./...`) rather than as an independently
-# triggered workflow. Adding a new CI workflow means adding one filter entry and one calling
-# job here -- it never needs its own triggers, its own path filtering, or its own required
-# check.
+# triggered workflow. A constituent workflow never declares its own triggers, path filtering,
+# or required check -- all three live here instead.
 #
 # Path filtering happens here (the `changes` job) rather than as a trigger-level `paths:`
 # filter on each constituent workflow. A trigger-level filter makes GitHub skip scheduling a
@@ -14,6 +13,15 @@ name: ci
 # blocks merging forever. `required-check` below is unconditional (`if: always()`), so it
 # always posts a conclusion, whether or not any constituent workflow actually ran, and that's
 # the one check branch protection / the merge queue should require.
+#
+# To add a new CI workflow (say `foo.yaml`, converted to `on: workflow_call`), all 3 steps
+# are required -- `required-check`'s `needs:` is a plain static list, so skipping the third
+# step means a failure in `foo` is silently invisible to `required-check`:
+#   1. Add a `foo` entry to the `changes` job's `filters:` (and to `force`'s condition, if
+#      `foo` should always build for merge_group/workflow_dispatch/tag pushes).
+#   2. Add a `foo:` job below, `needs: changes`, `if: needs.changes.outputs.foo == 'true'`,
+#      `uses: ./.github/workflows/foo.yaml`.
+#   3. Add `foo` to `required-check`'s `needs:` list.
 
 on:
   pull_request:
@@ -80,6 +88,11 @@ jobs:
   # not a failure. This is what makes a docs-only PR mergeable: no constituent workflow even
   # gets invoked, but this job still posts a conclusion, so the required check is never left
   # permanently "Expected".
+  #
+  # `needs:` below is a static list: it does NOT automatically pick up a new constituent
+  # workflow's calling job. See the "To add a new CI workflow" note at the top of this file --
+  # every calling job (like `ghci`) must be added here explicitly, or its failures become
+  # invisible to this check.
   required-check:
     name: required-check
     needs: [changes, ghci]

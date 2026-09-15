@@ -7,10 +7,16 @@ Suppose you want to add a new container named `xyz` to this repository:
 1. Add a directory named `xyz/` with the recipe (a `Dockerfile`, or several under
    subdirectories if the build has stages) and a `readme` describing what the image is for
    and how to run it.
-2. Add a workflow at `.github/workflows/xyz.yaml` that builds it. Scope its `paths:` to
-   `xyz/**` and `.github/workflows/xyz.yaml` so it does not rebuild on unrelated changes,
-   and give it a `concurrency` group so superseded runs get cancelled.
-3. Tag releases as `xyz-1.2.3`; the workflow's `tags:` filter turns that into an image tag.
+2. Add a workflow at `.github/workflows/xyz.yaml` that builds it, triggered by
+   `on: workflow_call` (plus `workflow_dispatch` if you want to be able to force a standalone
+   rebuild from the Actions UI) -- not by its own `pull_request`/`push`/`paths:`. Wire it into
+   `.github/workflows/ci.yaml` instead, which owns every real trigger and the required status
+   check: add an `xyz` entry to the `changes` job's path filters, a calling job
+   (`uses: ./.github/workflows/xyz.yaml`) gated on that filter, and `xyz` to
+   `required-check`'s `needs:` list. See the comment at the top of `ci.yaml` for the full
+   3-step checklist -- skipping the `required-check` step means a failing `xyz` build would
+   go unnoticed by branch protection.
+3. Tag releases as `xyz-1.2.3`; `ci.yaml`'s `tags:` filter turns that into an image tag.
 
 Some conventions worth following, and why:
 

@@ -23,8 +23,10 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 - **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
   `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
   owned by root.
-- **Path-scoped workflows.** Each workflow only triggers on its own directory and its own
-  workflow file, so touching one image never rebuilds the others.
+- **Path-scoped builds, centrally triggered.** `.github/workflows/ci.yaml` is the only
+  workflow with real triggers; it path-filters and fans out to one reusable workflow per
+  image family (e.g. `ghci.yaml`), so touching one image never rebuilds the others, but every
+  PR still gets a single required status check regardless of which paths it touched.
 
 Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: write`
 there), so those runs build every stage as validation only, each one FROM the image `main`
