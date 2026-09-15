@@ -46,7 +46,9 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 # LAPACK provider. yaml-cpp, cmake and boost come from the compiler image, which every
 # env shares, so they are not rebuilt here.
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
+    spack install ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack gc -y && \
+    spack clean -a
 
 # CUDA. On the NVIDIA-repo path, install compiler+libraries only, NOT the "cuda-toolkit"
 # meta-package: it pulls in nsight-systems, which needs GUI libs this headless image lacks.
@@ -57,7 +59,9 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "skipping CUDA"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install cuda@12.4.0 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}; \
+      spack install cuda@12.4.0 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+      spack gc -y && \
+      spack clean -a; \
     else \
       curl -fsSL "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo" \
           -o /etc/yum.repos.d/cuda-rhel9.repo && \
@@ -71,14 +75,18 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 
 # MPI
 RUN source /spack/share/spack/setup-env.sh && \
-    spack install ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}
+    spack install ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+    spack gc -y && \
+    spack clean -a
 
 # I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first, so
 # without it these would only match the MPI above by virtue of spack reusing it.
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
 RUN source /spack/share/spack/setup-env.sh && \
     on="%${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC}" && \
-    spack install hdf5 $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on
+    spack install hdf5 $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
+    spack gc -y && \
+    spack clean -a
 
 # MOAB's "zoltan" TPL, as fetched by the vendor install-bootstrap.sh script further down
 # from its default (circa-2013) dist tarball mirror, ships a bundled config.guess/
@@ -96,13 +104,17 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       source /spack/share/spack/setup-env.sh && \
       spack install --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC} && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
-      ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC})" /projects/e3sm/software/moab/tpls/zoltan; \
+      ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC})" /projects/e3sm/software/moab/tpls/zoltan && \
+      spack gc -y && \
+      spack clean -a; \
     fi
 
 # Debugging libs
 RUN if [ -n "${DEBUG_SPECS}" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install ${DEBUG_SPECS} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH}; \
+      spack install ${DEBUG_SPECS} %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} && \
+      spack gc -y && \
+      spack clean -a; \
     fi
 
 # Make sure the modules for the installed packages are all available
