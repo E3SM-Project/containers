@@ -41,9 +41,11 @@ on:
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
   # A fork PR gets no packages:write, so nothing can be pushed and there is nothing to merge:
-  # it still builds every stage, as validation, FROM the images main published. A merge_group
-  # run is likewise validation-only: it must never publish images under the queue's throwaway ref.
-  PUSH: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+  # it still builds every stage, as validation, FROM the images main published. merge_group
+  # runs are not excluded here: they publish too (under an ephemeral -mg-<sha> tag, see the
+  # Meta step below), so that a stage this PR changes builds FROM the sibling stage this same
+  # run just published, not from main's possibly-stale tag.
+  PUSH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
   build:
@@ -118,7 +120,7 @@ jobs:
 
   merge:
     needs: build
-    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,8 +158,17 @@ jobs:
           tags: |
             type=raw,value=${{ inputs.tag }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr,prefix=${{ inputs.tag }}-pr-
-            type=ref,event=branch,prefix=${{ inputs.tag }}-
+            # metadata-action's `branch` ref type only checks that github.ref matches
+            # refs/heads/*, with no event-name gating -- merge_group's temporary
+            # gh-readonly-queue/... ref matches that too, so without disabling it here this
+            # rule would additionally tag every merge_group build with a second, un-swept
+            # tag derived from that throwaway ref name.
+            type=ref,event=branch,prefix=${{ inputs.tag }}-,enable=${{ github.event_name != 'merge_group' }}
             type=match,pattern=${{ inputs.release_pattern }},group=1,prefix=${{ inputs.tag }}-
+            # metadata-action has no dedicated `event=merge_group` ref type, so this is spelled
+            # out by hand; it must match ghci.yaml's `suffix` job exactly (-mg-<full sha>), or
+            # the two workflows disagree on what tag the merge job just published.
+            type=raw,value=${{ inputs.tag }}-mg-${{ github.sha }},enable=${{ github.event_name == 'merge_group' }}
           labels: |
             org.opencontainers.image.description=${{ inputs.description }}
 

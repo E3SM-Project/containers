@@ -61,9 +61,18 @@ jobs:
 
   # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
   # stage builds FROM the image the previous stage just published rather than main's:
-  # -pr-<N> on a PR, -<version> on a ghci-<version> tag, -<branch> on a non-main dispatch.
-  # A fork PR, or a merge_group run, publishes nothing, so its stages build FROM main's
-  # images instead.
+  # -pr-<N> on a PR, -mg-<sha> on a merge_group run, -<version> on a ghci-<version> tag,
+  # -<branch> on a non-main dispatch. A fork PR publishes nothing, so its stages build FROM
+  # main's images instead -- it has no packages:write to publish anything with.
+  #
+  # merge_group gets its own ephemeral suffix (keyed on the merge commit sha, not the PR
+  # number) rather than reusing main's images like a fork PR does: unlike a fork PR, a
+  # merge_group run *can* publish, and if it built FROM main's stale tags instead, a PR that
+  # changes both an upstream stage (e.g. ghci/base) and a downstream one (ghci/compiler)
+  # would never have that combination validated together -- compiler would build FROM
+  # whatever base main last published, not the new base this same run just built. sha (not PR
+  # number) keys the suffix because merge queues can batch several PRs into one merge_group
+  # run, so there may be no single PR number to key on.
   suffix:
     runs-on: ubuntu-latest
     outputs:
@@ -76,9 +85,10 @@ jobs:
           FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           if [ "$EVENT" = merge_group ]; then
-            value=""
+            value="-mg-$SHA"
           elif [ "$EVENT" = pull_request ] && [ "$FORK" = true ]; then
             value=""
           elif [ "$EVENT" = pull_request ]; then
