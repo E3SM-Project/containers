@@ -1,6 +1,7 @@
 #!/bin/bash
 # Run as the image's default user, under a login shell:
-# docker run --rm -i IMAGE bash -l -s < ghci/tests/smoke.sh
+# docker run --rm -e EXPECT_CUDA=no -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
+#   IMAGE bash -l /opt/ghci-tests/smoke.sh
 set -euo pipefail
 
 test "$(id -u)" -ne 0
@@ -11,7 +12,7 @@ cmake --version
 mpirun --version
 nc-config --version
 nf-config --version
-python3 -m pip check
+python3 "$(dirname "${BASH_SOURCE[0]}")/check_python.py"
 python3 - <<'PY'
 import os
 from pathlib import Path

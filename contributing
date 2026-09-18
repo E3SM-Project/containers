@@ -36,6 +36,7 @@ Before opening a PR, run the lightweight checks (no image build needed):
 ```bash
 python3 scripts/check-dockerfiles.py
 bash -n ghci/tests/smoke.sh
+python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
 git diff --check
 ```
 

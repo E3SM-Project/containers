@@ -207,6 +207,13 @@ user: login environment, writable venv, Python dependency consistency, NetCDF ro
 Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
 an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
 
+The ARM CUDA image currently has one verified upstream packaging defect:
+`nvidia-cusparselt-cu13==0.8.1` has an `aarch64` wheel filename but an internal
+`manylinux2014_sbsa` tag. The dependency check warns and continues only for that exact
+version, tag, Linux ARM64 CUDA environment, and lone pip diagnostic. Any other error
+still fails, and all runtime tests must pass. This does not establish GPU execution;
+that requires an NVIDIA host. Package files are not modified by this exception.
+
 To inspect images already present in a local Docker engine, without building or pulling:
 
 ```bash

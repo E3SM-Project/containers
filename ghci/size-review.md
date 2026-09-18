@@ -69,8 +69,28 @@ before making further MOAB reductions.
 - The smoke script passes Bash parsing; the size reporter was exercised on the cached image.
 - The unchanged base image rebuilt successfully from local Docker cache before the
   decision to move builds to CI. The attempted compiler baseline build was cancelled.
-- Full updated builds and runtime smoke results are pending GitHub Actions. No local
-  full-stack size reduction, CUDA execution, or downstream E3SM test result is claimed.
+- At initial publication, full updated builds and runtime smoke results were pending
+  GitHub Actions; see the follow-up below. No local full-stack size reduction, CUDA
+  execution, or downstream E3SM test result is claimed.
+
+### ARM CUDA dependency-check follow-up
+
+The initial CI build completed all image variants; four of the five env/platform smoke
+tests passed. The ARM CUDA smoke job stopped at `pip check`, before importing Torch,
+with `nvidia-cusparselt-cu13 0.8.1 is not supported on this platform`.
+Inspection of the NVIDIA wheel linked by the official cu130 index confirmed a filename
+ending in `manylinux2014_aarch64.whl` but internal `WHEEL` metadata declaring
+`Tag: py3-none-manylinux2014_sbsa`.
+
+The smoke test now permits only that single diagnostic with exit status 1, on Linux
+ARM64 with `EXPECT_CUDA=yes`, after checking the installed package version and exact
+internal tag. It preserves pip's output, emits a warning, leaves package files untouched,
+and continues the runtime tests. Additional diagnostics, different versions/tags/platforms,
+missing metadata, and unexpected exit statuses still fail. Regression tests cover these
+guards. Updated online smoke results remain pending; no GPU execution is claimed.
+
+Evidence: [failed ARM smoke job](https://github.com/E3SM-Project/containers/actions/runs/35299045096/job/105660401893)
+and [official cu130 wheel index](https://download.pytorch.org/whl/cu130/nvidia-cusparselt-cu13/).
 
 Reference behavior: [Docker layer storage](https://docs.docker.com/engine/storage/drivers/),
 [pip caching](https://pip.pypa.io/en/stable/topics/caching/),
