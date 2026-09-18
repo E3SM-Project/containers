@@ -7,9 +7,10 @@ Suppose you want to add a new container named `xyz` to this repository:
 1. Add a directory named `xyz/` with the recipe (a `Dockerfile`, or several under
    subdirectories if the build has stages) and a `readme` describing what the image is for
    and how to run it.
-2. Add a workflow at `.github/workflows/xyz.yaml` that builds it. Scope its `paths:` to
-   `xyz/**` and `.github/workflows/xyz.yaml` so it does not rebuild on unrelated changes,
-   and give it a `concurrency` group so superseded runs get cancelled.
+2. Add a workflow at `.github/workflows/xyz.yaml` that builds it. Filter relevant paths
+   inside the workflow if its status check is required, as `ghci.yaml` does, so unrelated
+   edits still receive a passing check. Include shared workflows and validation scripts
+   in the filter. Give it a `concurrency` group so superseded runs get cancelled.
 3. Tag releases as `xyz-1.2.3`; the workflow's `tags:` filter turns that into an image tag.
 
 Some conventions worth following, and why:
@@ -24,6 +25,23 @@ Some conventions worth following, and why:
 - **Keep build steps chunked.** Installing packages a few at a time, stable ones first,
   means a version bump late in the recipe does not invalidate the whole layer cache.
 - **Clean up package manager caches in the same `RUN`** that installed things, or the
-  cache ends up in the layer regardless.
+  cache ends up in the layer regardless. Follow every Spack install with `spack clean -a`,
+  and use `pip install --no-cache-dir` for image builds. Spack's `clean` preserves installed
+  packages and bootstrap tools; `gc` removes dependencies and needs separate consideration.
+- **Set ownership when creating files.** Run pip as the runtime user. Recursive `chmod`
+  or `chown` of inherited software can copy gigabytes into another layer.
+
+Before opening a PR, run the lightweight checks (no image build needed):
+
+```bash
+python3 scripts/check-dockerfiles.py
+bash -n ghci/tests/smoke.sh
+git diff --check
+```
+
+The PR workflow also runs actionlint, builds each supported platform, and runs runtime
+smoke checks on the published env images. Fork PRs cannot publish; their smoke jobs are
+skipped. GPU images are tested for imports and CPU execution on standard runners; actual
+GPU execution still needs an NVIDIA host. Spack builds can take hours.
 
 See the `ghci` container for a worked example.

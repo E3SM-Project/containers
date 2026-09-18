@@ -4,13 +4,13 @@ Development and testing environments for E3SM: a spack-built software stack on U
 runnable anywhere with podman or docker. Software only -- no input data is baked in; mount
 what you need.
 
-## Prerequisite: GitHub container registry (GHCR) authentication
+## GitHub container registry (GHCR) authentication
 
-Our images are stored on GitHub's container registry. You must authenticate with GHCR before running `podman run` or `podman pull`:
+Public images can be pulled anonymously. If you need authenticated access to GHCR:
 
 1. **Create a personal access token (PAT):**
    - Go to your GitHub account **Settings > Developer settings > Personal access tokens**.
-   - Generate a token (Classic or Fine-grained) with the **`read:packages`** scope enabled (plus `write:packages` if you plan to push images).
+   - Generate a classic token with the **`read:packages`** scope enabled (plus `write:packages` if you plan to push images).
 
 2. **Log in via podman:**
    ```bash
@@ -196,6 +196,24 @@ natively, pushes by digest, and merges the digests into one manifest list per ta
 
 ## Relationship to `ghci-snl`
 
-These recipes started life as `ghci-snl/`, which is now frozen and will be removed. There
+These recipes started life as `ghci-snl/`, which has been removed from this repository. There
 is nothing SNL-specific in them, and nothing tied to GitHub Actions either -- they run
 anywhere.
+
+## Size reports and runtime checks
+
+For same-repository PRs, CI tests every published env/platform combination as the non-root
+user: login environment, writable venv, Python dependency consistency, NetCDF round-trip,
+Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
+an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
+
+To inspect images already present in a local Docker engine, without building or pulling:
+
+```bash
+python3 scripts/image-size.py BASELINE_IMAGE CANDIDATE_IMAGE
+python3 scripts/image-size.py CANDIDATE_IMAGE --json > image-size.json
+```
+
+Compare the same platform and variant. These are uncompressed layer totals, not registry
+download sizes or unique disk usage across shared images. See [size-review.md](size-review.md)
+for the initial findings and validation limits.

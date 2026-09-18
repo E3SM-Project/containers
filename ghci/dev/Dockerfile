@@ -8,6 +8,7 @@ ARG VARIANT=unknown
 ENV E3SM_ENV=${VARIANT}
 
 USER root
+SHELL ["/bin/bash", "-o", "pipefail", "-lc"]
 
 # Editors and the usual navigation tools
 # (less, nano, screen and zip come from the env image)

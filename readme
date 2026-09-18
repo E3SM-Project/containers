@@ -23,11 +23,15 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 - **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
   `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
   owned by root.
-- **Path-scoped workflows.** Each workflow only triggers on its own directory and its own
-  workflow file, so touching one image never rebuilds the others.
+- **Path-scoped builds.** The ghci workflow always reports its required check, but filters
+  changes inside the workflow so unrelated edits skip the expensive builds.
 
 Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: write`
 there), so those runs build every stage as validation only, each one FROM the image `main`
 published rather than the one the previous stage just built.
 
 See [contributing](contributing) to add a new image.
+
+See [the ghci size review](ghci/size-review.md) for measured layer overhead, changes,
+and remaining opportunities. CI runs shell/workflow lint before building, then checks
+the published env images and uploads per-architecture size reports.
