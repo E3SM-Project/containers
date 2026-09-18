@@ -88,17 +88,20 @@ RUN source /spack/share/spack/setup-env.sh && \
     spack clean -a
 RUN echo "module load python" >> /etc/profile.d/eamxx-env.sh
 
-RUN source /etc/profile.d/eamxx-env.sh && \
-    cd /projects/e3sm/software && python3 -m  venv eamxx-venv
+# Create and populate the venv as the runtime user. Doing this under root and later
+# recursively changing ownership duplicates the complete environment in a new layer.
+USER ${E3SM_USER}
+ENV HOME=/home/${E3SM_USER}
+RUN python3 -m venv /projects/e3sm/software/eamxx-venv && \
+    source /projects/e3sm/software/eamxx-venv/bin/activate && \
+    python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir \
+        pyyaml pylint netCDF4 psutil pybind11 mpi4py packaging xarray
+
+# Add the activation hook after the venv exists, so every later login shell can source it.
+USER root
+ENV HOME=/root
 RUN echo "source /projects/e3sm/software/eamxx-venv/bin/activate" >> /etc/profile.d/eamxx-env.sh
-
-RUN source /etc/profile.d/eamxx-env.sh &&  \
-    python3 -m pip install --upgrade pip
-
-RUN source /etc/profile.d/eamxx-env.sh &&       \
-    python3 -m pip install                      \
-            pyyaml pylint netCDF4 psutil        \
-            pybind11 mpi4py packaging xarray
 
 ENTRYPOINT []
 

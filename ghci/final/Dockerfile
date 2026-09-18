@@ -142,35 +142,35 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
         echo 'export LD_LIBRARY_PATH=$CUDA_HOME/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}'; } >> /etc/profile.d/eamxx-env.sh; \
     fi
 
-# Install numpy, and cupy where there is a GPU to use it. The plain "cupy" sdist builds
-# from source and must link against the driver stubs; "cupy-cuda13x" is a prebuilt wheel.
+# Install Python packages as the runtime user, avoiding a later recursive chmod of the
+# complete venv. The plain "cupy" sdist builds from source and must link against driver stubs.
+USER ${E3SM_USER}
+ENV HOME=/home/${E3SM_USER}
 RUN source /etc/profile.d/modules.sh && \
     source /etc/profile.d/eamxx-env.sh && \
     if [ "${WITH_CUDA}" != "yes" ]; then \
-      python3 -m pip install numpy; \
+      python3 -m pip install --no-cache-dir numpy; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
-      LIBRARY_PATH="$CUDA_HOME/lib64/stubs:$LIBRARY_PATH" python3 -m pip install numpy "${E3SM_CUPY_PKG}"; \
+      LIBRARY_PATH="$CUDA_HOME/lib64/stubs:$LIBRARY_PATH" python3 -m pip install --no-cache-dir numpy "${E3SM_CUPY_PKG}"; \
     else \
-      python3 -m pip install numpy "${E3SM_CUPY_PKG}"; \
+      python3 -m pip install --no-cache-dir numpy "${E3SM_CUPY_PKG}"; \
     fi
 
 # Install pytorch. The CUDA flavor file overrides TORCH_* on the NVIDIA-repo path.
 RUN source /etc/profile.d/cuda-flavor.sh && \
     source /etc/profile.d/modules.sh && \
     source /etc/profile.d/eamxx-env.sh && \
-    python3 -m pip install --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
+    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
 
-# Whomever will run the container will be able to pip install pkgs in the venv
-# After all, the container is ephemeral/disposable, so there's no persistent state
-RUN chmod -R a+rwX /projects/e3sm/software/eamxx-venv
+USER root
+ENV HOME=/root
 
 # Clean up garbage packages that were only needed to BUILD other pkgs (not to USE them)
 RUN source /spack/share/spack/setup-env.sh && \
     spack gc -y
 
-# Remove spack repo (except .git, so you can restore it) and spack buildcache (to keep image size under control)
-RUN rm -rf /spack-buildcache && \
-    rm -rf /spack/*
+# Keep Spack usable for inspecting or extending the stack. Deleting its inherited files
+# here only hides them; their bytes remain in the compiler layer.
 
 # CIME tests need a bunch of perl
 RUN microdnf install -y perl && \
@@ -214,14 +214,14 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
           --bootstrap-branch=vijaysm/automated-build-scripts      \
           --bootstrap-refresh --yes                               \
           --prefix=/projects/e3sm/software/moab && \
-      rm -rf /tmp/e3sm /tmp/install-bootstrap.sh; \
+      rm -rf /tmp/e3sm /tmp/install-bootstrap.sh && \
+      chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
     fi
 
 # Done with the flavor file; what it selected is already baked into eamxx-env.sh
 RUN rm -f /etc/profile.d/cuda-flavor.sh
 
 # Hand the runtime over to the non-root user created in the base image
-RUN chown -R ${E3SM_USER}:${E3SM_USER} /projects/e3sm
 USER ${E3SM_USER}
 ENV HOME=/home/${E3SM_USER}
 WORKDIR ${HOME}
