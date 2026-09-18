@@ -102,7 +102,7 @@ RUN source /spack/share/spack/setup-env.sh && \
 # recipe simple: on x86_64 the vendor script would have built the same thing.
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       source /spack/share/spack/setup-env.sh && \
-      spack install --fail-fast --reuse zoltan@3.901+mpi+fortran~shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC} && \
+      spack install --fail-fast --reuse zoltan@3.901+mpi+fortran+shared %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC} && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
       ln -s "$(spack location -i zoltan@3.901 %${COMPILER}@${COMPILER_VERSION} arch=${SPACK_ARCH} ^${MPI_SPEC})" /projects/e3sm/software/moab/tpls/zoltan && \
       spack gc -y && \
