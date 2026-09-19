@@ -222,5 +222,4 @@ python3 scripts/image-size.py CANDIDATE_IMAGE --json > image-size.json
 ```
 
 Compare the same platform and variant. These are uncompressed layer totals, not registry
-download sizes or unique disk usage across shared images. See [size-review.md](size-review.md)
-for the initial findings and validation limits.
+download sizes or unique disk usage across shared images.
