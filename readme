@@ -32,6 +32,5 @@ published rather than the one the previous stage just built.
 
 See [contributing](contributing) to add a new image.
 
-See [the ghci size review](ghci/size-review.md) for measured layer overhead, changes,
-and remaining opportunities. CI runs shell/workflow lint before building, then checks
-the published env images and uploads per-architecture size reports.
+CI runs shell/workflow lint before building, then checks the published env images and
+uploads per-architecture size reports.
