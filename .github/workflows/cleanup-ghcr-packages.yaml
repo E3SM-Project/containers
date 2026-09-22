@@ -40,7 +40,10 @@ jobs:
             const owner = context.repo.owner;
             const package_type = 'container';
             const pr = context.payload.pull_request.number;
-            const tagRe = new RegExp(`-pr-${pr}$`);
+            // build-multiarch.yaml now also scopes a PR's own cache-to writes to
+            // buildcache-<tag>-pr-<N>-<arch> (see its tag_suffix input), so the PR-close pattern
+            // must accept an optional trailing arch on top of the plain -pr-<N> image tags.
+            const tagRe = new RegExp(`-pr-${pr}(?:-(?:x86_64|aarch64))?$`);
 
             async function listVersions(package_name) {
               const versions = [];
@@ -147,8 +150,13 @@ jobs:
             // solely -pr-<N> (no -mg- tag at all, e.g. a still-open PR nobody has re-pushed
             // in a while) is intentionally left alone here, exactly as before this change;
             // delete-pr-images remains the only thing that ever removes those, on PR close.
-            const mgRe = /-mg-[0-9a-f]{40}$/;
-            const prRe = /-pr-\d+$/;
+            //
+            // build-multiarch.yaml also scopes a PR/merge_group run's own cache-to writes to
+            // buildcache-<tag>-pr-<N>-<arch> / buildcache-<tag>-mg-<sha>-<arch> (see its
+            // tag_suffix input), so both patterns need to accept an optional trailing arch too, on
+            // top of the plain image tags.
+            const mgRe = /-mg-[0-9a-f]{40}(?:-(?:x86_64|aarch64))?$/;
+            const prRe = /-pr-\d+(?:-(?:x86_64|aarch64))?$/;
             const isEphemeralMergeGroup = v => {
               const t = tags(v);
               return t.length > 0 && t.some(x => mgRe.test(x)) && t.every(x => mgRe.test(x) || prRe.test(x));

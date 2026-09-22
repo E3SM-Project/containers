@@ -135,6 +135,7 @@ jobs:
       tag: base
       context: ghci/base
       description: Base image for E3SM ghci containers
+      tag_suffix: ${{ needs.suffix.outputs.value }}
 
   compiler:
     needs: [suffix, base]
@@ -163,6 +164,7 @@ jobs:
       context: ghci/compiler
       arches: ${{ matrix.arches }}
       description: ${{ matrix.compiler }} compiler image for E3SM ghci containers
+      tag_suffix: ${{ needs.suffix.outputs.value }}
       build_args: |
         COMPILER=${{ matrix.spack_compiler }}
         COMPILER_VERSION=${{ matrix.version }}
@@ -218,6 +220,7 @@ jobs:
       context: ghci/final
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} image for E3SM testing and development
+      tag_suffix: ${{ needs.suffix.outputs.value }}
       build_args: |
         BASE_TAG=${{ matrix.compiler }}-${{ matrix.version }}${{ needs.suffix.outputs.value }}
         ${{ matrix.args }}
@@ -246,6 +249,7 @@ jobs:
       context: ghci/dev
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} plus developer tooling
+      tag_suffix: ${{ needs.suffix.outputs.value }}
       build_args: |
         BASE_TAG=${{ matrix.env }}${{ needs.suffix.outputs.value }}
         VARIANT=${{ matrix.env }}
