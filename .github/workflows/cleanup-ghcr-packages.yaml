@@ -114,15 +114,21 @@ jobs:
 
             const inputHours = context.payload.inputs?.hours_old;
             const minHours = inputHours !== undefined ? parseFloat(inputHours) : 48;
-            core.info(`Targeting untagged images, stale buildcache tags, and merge_group -mg-<sha> images older than ${minHours} hours.`);
+            core.info(`Targeting untagged images and merge_group -mg-<sha> images older than ${minHours} hours.`);
 
             const tags = v => v.metadata?.container?.tags || [];
 
-            // buildcache-* tags are disposable build-cache manifests, not release artifacts. If a
-            // stage/arch combo stops being built, its tag never moves again and the cache manifest
-            // (often large, since it's pushed with mode=max) would otherwise survive forever, since
-            // the age check below normally only ever considers untagged versions.
-            const isStaleCacheCandidate = v => tags(v).length > 0 && tags(v).every(t => t.startsWith('buildcache-'));
+            // buildcache-* tags are never swept by age while still live. An earlier version of this
+            // job deleted the *current* buildcache-<tag>-<arch> pointer once it turned 48h old,
+            // reasoning it was an orphaned tag from a stage/arch combo no longer built -- but
+            // base/compiler layers routinely go longer than that between rebuilds, so it was really
+            // deleting the only cache build-multiarch.yaml had for that stage/arch, forcing the next
+            // PR touching anything downstream into a fully cold build. A buildcache tag only ever
+            // points at one digest at a time, so once a fresh `cache-to` moves it to a new digest,
+            // the superseded digest becomes genuinely untagged and is swept by the ordinary
+            // untagged-version branch below -- no age check keyed on the tag name is needed for that
+            // case. A stage/arch combo that stops being built entirely keeps its buildcache tag (and
+            // the blobs it references) around indefinitely; on a public package that costs nothing.
 
             // merge_group runs publish under an ephemeral <tag>-mg-<sha> tag (see
             // build-multiarch.yaml) so that stage-to-stage chaining works within that one
@@ -149,8 +155,10 @@ jobs:
             };
 
             // A version is sweepable-by-age if it's genuinely untagged, or if every one of its
-            // tags falls into one of the ephemeral categories above.
-            const isSweepable = v => isStaleCacheCandidate(v) || isEphemeralMergeGroup(v);
+            // tags is an ephemeral merge_group/PR tag. A live buildcache-* tag is never sweepable
+            // (see above); a superseded one falls out of `tagged` entirely once retagged and is
+            // picked up by the genuinely-untagged case instead.
+            const isSweepable = v => isEphemeralMergeGroup(v);
 
             // The per-arch images a multi-arch tag points at are themselves UNTAGGED package
             // versions, so deleting untagged versions by age would break every multi-arch
@@ -191,13 +199,12 @@ jobs:
               core.info(`${package_name}: ${versions.length} version(s) retrieved`);
 
               const tagged = versions.filter(v => tags(v).length > 0);
-              // A sweepable (buildcache-only, or mg-only/mg+pr) version is never the digest a
-              // real published tag's manifest list points at, so it doesn't need to protect
-              // anything by being marked in-use. A buildcache tag isn't pushed with
-              // image-manifest=true, so it can itself be an OCI index referencing several
-              // untagged config/layer blobs used for cache import -- those still stay protected
-              // via referencedDigests() below while the tag is live; only the sweepable tag's
-              // own digest is excluded here so the tag itself can expire once stale.
+              // A sweepable (mg-only/mg+pr) version is never the digest a real published tag's
+              // manifest list points at, so it doesn't need to protect anything by being marked
+              // in-use. A live buildcache-* tag is never sweepable, so its own digest lands in
+              // `inUse` here too; it isn't pushed with image-manifest=true, so it can itself be an
+              // OCI index referencing several untagged config/layer blobs used for cache import --
+              // those get protected the same way, via referencedDigests() below.
               const inUse = new Set(tagged.filter(v => !isSweepable(v)).map(v => v.name));
               let resolvable = true;
               for (const v of tagged) {
@@ -217,7 +224,7 @@ jobs:
                 if (inUse.has(v.name)) return false;
                 return (now - new Date(v.created_at)) / 36e5 > minHours;
               });
-              core.info(`${package_name}: ${toDelete.length} version(s) match (untagged, stale buildcache, or merge_group), ${inUse.size} digest(s) in use`);
+              core.info(`${package_name}: ${toDelete.length} version(s) match (untagged or merge_group), ${inUse.size} digest(s) in use`);
 
               for (const v of toDelete) {
                 try {
