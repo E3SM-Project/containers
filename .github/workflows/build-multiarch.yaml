@@ -37,6 +37,15 @@ on:
         required: false
         type: string
         default: 'ghci-(.*)'
+      tag_suffix:
+        description: >-
+          This run's suffix (e.g. -pr-42, -mg-<sha>), same as what the caller appends to
+          BASE_TAG build-args; empty on a push to main. Scopes this run's own cache-to
+          writes so a PR (or merge_group run) never overwrites the shared cache main and
+          other PRs read from -- see the cache-from/cache-to comment below.
+        required: false
+        type: string
+        default: ''
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
@@ -99,8 +108,22 @@ jobs:
           # other's) entries and the next build starts from scratch. A registry tag has no such quota
           # and isn't branch-scoped, so PRs and main naturally share it. Skipped on cache-to for fork
           # PRs, which can't push; they still read whatever main last published.
-          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache-${{ inputs.tag }}-${{ matrix.arch }}
-          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache-{1}-{2},mode=max,ignore-error=true', env.IMAGE, inputs.tag, matrix.arch) || '' }}
+          #
+          # cache-to only ever writes this run's own buildcache-<tag><tag_suffix>-<arch> tag, never
+          # the plain buildcache-<tag>-<arch> one main and every other PR reads from: a PR (or
+          # merge_group run) that touches this stage's Dockerfile would otherwise overwrite the
+          # shared cache with its own not-yet-reviewed content, forcing every unrelated concurrent
+          # PR (and main itself, if this PR never merges) into a cold rebuild the next time they
+          # import it. cache-from still reads the plain tag too (as a second, lower-priority
+          # source), so a PR's first build still benefits from whatever main last cached; its own
+          # suffixed tag only exists once this run's cache-to has written it at least once (e.g. a
+          # second push to the same PR), and a not-yet-existing cache-from source is a soft error
+          # buildx logs and skips, not a build failure. tag_suffix is empty on a push to main, so
+          # both cache-from lines and cache-to collapse onto the one plain tag, same as before.
+          cache-from: |
+            type=registry,ref=${{ env.IMAGE }}:buildcache-${{ inputs.tag }}${{ inputs.tag_suffix }}-${{ matrix.arch }}
+            ${{ inputs.tag_suffix != '' && format('type=registry,ref={0}:buildcache-{1}-{2}', env.IMAGE, inputs.tag, matrix.arch) || '' }}
+          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache-{1}{2}-{3},mode=max,ignore-error=true', env.IMAGE, inputs.tag, inputs.tag_suffix, matrix.arch) || '' }}
       - name: Export digest
         if: env.PUSH == 'true'
         run: |
