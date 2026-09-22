@@ -221,6 +221,11 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
 # Done with the flavor file; what it selected is already baked into eamxx-env.sh
 RUN rm -f /etc/profile.d/cuda-flavor.sh
 
+# This fixes an issue with OpenMPI 4.x, where a race condition can cause orte teardown
+# to report an error. Since it's NOT out fault, we ignore these errors and prevent
+# mpirun from returning a non-zero rc. Irrelevant for MPICH installations
+ENV OMPI_MCA_orte_allowed_exit_without_sync=1
+
 # Hand the runtime over to the non-root user created in the base image
 USER ${E3SM_USER}
 ENV HOME=/home/${E3SM_USER}
