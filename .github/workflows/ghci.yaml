@@ -29,11 +29,11 @@ concurrency:
 # `required-check` is unconditional (`if: always()`) it posts a conclusion on every run, so
 # branch protection / the merge queue always has something to wait on.
 jobs:
-  # merge_group can't use path filters at the trigger level (a GitHub limitation), a
-  # workflow_dispatch run is a deliberate manual request, and a ghci-* tag can point at a
-  # commit that itself touches nothing ghci-related (the filter would then see no diff and
-  # skip the release build) -- all three are always treated as relevant. Every other event
-  # only builds when ghci-relevant files changed.
+  # merge_group can't use path filters at the trigger level (a GitHub limitation),
+  # So we must run a filter manually, to ensure we can detect whether to run the
+  # workflow or not also for merge_group events. Two exceptions for which we ALWAYS run:
+  #  - workflow_dispatch: is a deliberate manual request, so we assume we want to run
+  #  - ref_type=='tag': if we push a tag, we want to ensure it is working, so run all tests
   changes:
     runs-on: ubuntu-latest
     permissions:
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
-        if: github.event_name != 'merge_group' && github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
+        if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
         with:
           filters: |
             relevant:
@@ -57,7 +57,7 @@ jobs:
               - '.github/workflows/build-multiarch.yaml'
               - 'scripts/**'
       - id: force
-        if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: echo "relevant=true" >> "$GITHUB_OUTPUT"
 
   # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
