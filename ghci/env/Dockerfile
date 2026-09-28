@@ -157,13 +157,19 @@ ARG GCC_TOOLSET=13
 ENV COMPILER=${COMPILER} \
     COMPILER_VERSION=${COMPILER_VERSION}
 
-RUN microdnf -y install \
+# NOTE: gcc-toolset drags in environment-modules (via scl-utils, even with weak deps off),
+# whose /etc/profile.d/modules.sh overwrites Lmod's: `module` then becomes Tcl modules, which
+# cannot read spack's .lua modulefiles, and nothing loads. Put Lmod's hooks back, and check.
+RUN cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
+    microdnf -y install \
         gcc-toolset-${GCC_TOOLSET}-gcc \
         gcc-toolset-${GCC_TOOLSET}-gcc-c++ \
         gcc-toolset-${GCC_TOOLSET}-gcc-gfortran \
         gcc-toolset-${GCC_TOOLSET}-libatomic-devel \
     && microdnf clean all \
     && rm -rf /var/cache/dnf && \
+    mv /tmp/modules.sh /tmp/modules.csh /etc/profile.d/ && \
+    grep -q /usr/share/lmod /etc/profile.d/modules.sh && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
     spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin && \
     spack config --scope system add "modules:default:lmod:core_compilers:[gcc@13.3.1,gcc@$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)]"
