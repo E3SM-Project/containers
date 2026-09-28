@@ -8,6 +8,8 @@
 # (.mod) that match that compiler, parallel I/O through netCDF-4/HDF5 and PnetCDF, LAPACK,
 # and CMake finding the C++ dependencies the way E3SM's build does.
 set -euo pipefail
+# NOTE: no `| grep -q` or `| head` below: they exit early, the writer gets SIGPIPE, and
+# pipefail turns that into a failure (exit 141) whenever the writer is still writing.
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work=$(mktemp -d)
@@ -47,16 +49,16 @@ for var in "${roots[@]}"; do
 done
 
 step "tools"
-cmake --version | head -1
-mpirun --version | head -1
+cmake --version | sed -n 1p
+mpirun --version | sed -n 1p
 nc-config --version
 nf-config --version
 pnetcdf-config --version
 
 step "MPI wrappers use ${COMPILER_SPEC}"
 for wrapper in mpicc mpicxx mpifort; do
-    "$wrapper" --version | head -1
-    "$wrapper" --version | grep -qF "${COMPILER_VERSION}"
+    "$wrapper" --version | sed -n 1p
+    "$wrapper" --version | grep -F "${COMPILER_VERSION}" >/dev/null
 done
 
 step "python"
@@ -201,8 +203,8 @@ C
 mpicc par.c -o par $(nc-config --cflags) -I"$PARALLEL_NETCDF_ROOT/include" \
     $(nc-config --libs) -L"$PARALLEL_NETCDF_ROOT/lib" -Wl,-rpath -Wl,"$PARALLEL_NETCDF_ROOT/lib" -lpnetcdf
 mpirun -n 2 ./par
-ncdump hdf5.nc | grep -q 'v = 0, 1'
-ncmpidump pnetcdf.nc | grep -q 'v = 0, 1'
+ncdump hdf5.nc | grep 'v = 0, 1' >/dev/null
+ncmpidump pnetcdf.nc | grep 'v = 0, 1' >/dev/null
 
 step "LAPACK (${E3SM_LAPACK}): solve a 2x2 system from Fortran"
 cat > la.f90 <<'F90'
@@ -257,7 +259,7 @@ cmake --build cmake-build > cmake-build.log 2>&1 || { cat cmake-build.log; exit 
 
 if [ "$E3SM_WITH_DEBUG_TOOLS" = yes ]; then
     step "debug tools"
-    gdb --version | head -1
+    gdb --version | sed -n 1p
     valgrind --version
     valgrind --error-exitcode=1 -q /bin/true
 fi
