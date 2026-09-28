@@ -168,7 +168,8 @@ jobs:
               COMPILER_VERSION=2024.1.0
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
-              LAPACK_SPEC=intel-oneapi-mkl
+              LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
+              BOOST_SPEC=boost@1.86.0
               DEBUG_SPECS=valgrind@3.20~mpi
               WITH_CUDA=no
               WITH_MOAB=no

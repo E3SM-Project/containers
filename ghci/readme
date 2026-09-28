@@ -181,6 +181,7 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `GCC_TOOLSET`      | `13`                         | UBI9 has 13 (13.3.1), 14 (14.2.1) and 15 (15.2.1) |
 | `MPI_SPEC`         | `openmpi@4.1.4`              | any spack spec, e.g. `openmpi@5.0.10`, `mpich@4.1.1` |
 | `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
+| `BOOST_SPEC`       | `boost`                      | intel uses `boost@1.86.0` (1.90 fails to build with it) |
 | `DEBUG_SPECS`      | `valgrind@3.20~mpi gdb@13.1` | empty for none |
 | `WITH_CUDA`        | `no`                         | |
 | `WITH_MOAB`        | `yes`                        | |
