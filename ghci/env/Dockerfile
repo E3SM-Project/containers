@@ -145,17 +145,19 @@ RUN sed -i "s/@SPACK_TARGET@/${SPACK_ARCH##*-}/" /spack-configuration/packages.y
 
 # 9. Compiler
 # gcc comes from RHEL's gcc-toolset-N packages rather than being built: UBI9 carries 13
-# (13.3.1), 14 and 15, so COMPILER_VERSION picks one, and the E4S cache is built with
-# gcc-toolset-13, so gcc 13.3.1 gets the most cache hits. The intel image still needs gcc
+# (13.3.1), 14 and 15, so GCC_TOOLSET picks the major version and the toolset decides the
+# rest. The E4S cache is built with gcc-toolset-13, so 13 gets the most cache hits. The intel image still needs gcc
 # (to build what oneAPI is not used for) and gets oneAPI itself from spack.
 # That gcc is lmod's core compiler, and so is gcc 13.3.1, which built what comes from the
 # cache: what they build goes in Core, and what oneAPI builds appears once the
 # intel-oneapi-compilers module is loaded.
+# The exact compiler this image builds with is written to /etc/profile.d/compiler.sh as
+# COMPILER_SPEC (e.g. gcc@13.3.1): for gcc it is only known once the toolset is installed,
+# and profile.d, not ENV, because ENV cannot be computed at build time.
 ARG COMPILER=gcc
-ARG COMPILER_VERSION=13.3.1
 ARG GCC_TOOLSET=13
-ENV COMPILER=${COMPILER} \
-    COMPILER_VERSION=${COMPILER_VERSION}
+ARG INTEL_VERSION=2024.1.0
+ENV COMPILER=${COMPILER}
 
 # NOTE: gcc-toolset drags in environment-modules (via scl-utils, even with weak deps off),
 # whose /etc/profile.d/modules.sh overwrites Lmod's: `module` then becomes Tcl modules, which
@@ -172,20 +174,28 @@ RUN cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
     grep -q /usr/share/lmod /etc/profile.d/modules.sh && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
     spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin && \
-    spack config --scope system add "modules:default:lmod:core_compilers:[gcc@13.3.1,gcc@$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)]"
+    gcc_version="$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)" && \
+    spack config --scope system add "modules:default:lmod:core_compilers:[gcc@13.3.1,gcc@${gcc_version}]" && \
+    case "${COMPILER}" in \
+      gcc) version="${gcc_version}" ;; \
+      intel-oneapi-compilers) version="${INTEL_VERSION}" ;; \
+      *) echo "unsupported COMPILER=${COMPILER}" >&2; exit 1 ;; \
+    esac && \
+    { echo "export COMPILER_VERSION=${version}"; \
+      echo "export COMPILER_SPEC=${COMPILER}@${version}"; } > /etc/profile.d/compiler.sh
 
 # The FPGA components are stripped to satisfy security scanners. patchelf is pinned to gcc
 # because otherwise spack may reuse the cache's ubuntu24.04 build of it (made with a newer
 # oneAPI, and linked against a newer glibc than UBI9 has): spack only checks os/libc
 # compatibility for binaries that record a libc dependency, which oneAPI-built ones do not.
 RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
-      spack install --fail-fast ${COMPILER}@${COMPILER_VERSION} ^patchelf %gcc && \
-      rm -rf "$(spack location -i ${COMPILER}@${COMPILER_VERSION})"/compiler/*/opt/oclfpga && \
+      spack install --fail-fast ${COMPILER_SPEC} ^patchelf %gcc && \
+      rm -rf "$(spack location -i ${COMPILER_SPEC})"/compiler/*/opt/oclfpga && \
       spack gc -y && \
       spack clean -sdfmp; \
     fi
 
-# Every E3SM-facing library below is built with "%${COMPILER}@${COMPILER_VERSION}", so it
+# Every E3SM-facing library below is built with "%${COMPILER_SPEC}", so it
 # links against what E3SM itself is compiled with. Dependencies below those roots (zlib,
 # openssl, ...) and the tools (cmake, python) may come from the cache built with gcc.
 # NOTE: in spack 1.x "%compiler" binds to the one spec it follows, so it is repeated per
@@ -200,7 +210,7 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # gcc's libstdc++ anyway, so the two are ABI-compatible.
 ARG LAPACK_SPEC=openblas
 ARG BOOST_SPEC=boost
-RUN on="%${COMPILER}@${COMPILER_VERSION}" && \
+RUN on="%${COMPILER_SPEC}" && \
     case "${BOOST_SPEC}" in *%*) boost="${BOOST_SPEC}" ;; *) boost="${BOOST_SPEC} $on" ;; esac && \
     spack install --fail-fast cmake python@3.11 yaml-cpp $on $boost ${LAPACK_SPEC} $on && \
     spack gc -y && \
@@ -262,14 +272,14 @@ RUN source /etc/e3sm/cuda-flavor.sh && \
     fi
 
 # 12. MPI
-RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
+RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER_SPEC} && \
     spack gc -y && \
     spack clean -sdfmp
 
 # 13. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first
 # and the cache has other MPIs, so without it spack is free to pick a different MPI for them.
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
-RUN on="%${COMPILER}@${COMPILER_VERSION} ^${MPI_SPEC}" && \
+RUN on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
     spack install --fail-fast hdf5+mpi $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
     spack gc -y && \
     spack clean -sdfmp
@@ -285,7 +295,7 @@ RUN on="%${COMPILER}@${COMPILER_VERSION} ^${MPI_SPEC}" && \
 # TPL-reuse feature (REUSE_TPLS=yes by default) will find this already built at the path it
 # expects and skip building zoltan itself. Done for every arch to keep this recipe simple.
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \
-      spec="zoltan@3.901+mpi+fortran+shared %${COMPILER}@${COMPILER_VERSION} ^${MPI_SPEC}" && \
+      spec="zoltan@3.901+mpi+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
       spack install --fail-fast $spec && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
       ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab/tpls/zoltan && \
@@ -383,6 +393,14 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       rm -rf /tmp/e3sm /tmp/install-bootstrap.sh && \
       chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
     fi
+
+# What this image is, for the smoke tests and for anyone inspecting a container
+RUN { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
+      echo "E3SM_MPI=${MPI_SPEC}"; \
+      echo "E3SM_LAPACK=${LAPACK_SPEC}"; \
+      echo "E3SM_WITH_CUDA=${WITH_CUDA}"; \
+      echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
+      echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env
 
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.
