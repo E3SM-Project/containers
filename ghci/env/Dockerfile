@@ -151,7 +151,7 @@ COPY spack-configuration/ /spack-configuration/
 # Pin every package to this arch's generic target (see above), fetch the pinned package
 # recipes, bootstrap spack's solver, and trust the binary cache's signing keys -- once, here,
 # so no later step or runtime user has to.
-RUN spack config --scope system add "packages:all:require:[target=${SPACK_ARCH##*-}]" && \
+RUN sed -i "s/@SPACK_TARGET@/${SPACK_ARCH##*-}/" /spack-configuration/packages.yaml && \
     spack repo update && \
     spack bootstrap now && \
     yes | spack buildcache keys --install --trust && \

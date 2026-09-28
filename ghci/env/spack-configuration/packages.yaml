@@ -1,5 +1,12 @@
 packages:
   all:
+    # The target line is filled in per arch by the Dockerfile. The os requirement is what
+    # actually keeps binaries from other distros out: os_compatible (concretizer.yaml) only
+    # admits rocky9, but spack does not apply it to build-only dependencies that have no libc
+    # node, and so reused e.g. an ubuntu24.04 patchelf (built against glibc 2.38) from the cache.
+    require:
+    - "target=@SPACK_TARGET@"
+    - any_of: ["os=rhel9", "os=rocky9"]
     permissions:
       read: world
       write: user
