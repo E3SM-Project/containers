@@ -188,9 +188,12 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # shadow the system ones and break rpm/microdnf TLS.
 
 # 10. Packages that depend only on the compiler, not on MPI or CUDA
+# BOOST_SPEC is boost@1.86.0 for intel (what the spack 0.23 images had): 1.90's b2 fails to
+# install with the intel toolset. gcc keeps the cache's 1.90.
 ARG LAPACK_SPEC=openblas
+ARG BOOST_SPEC=boost
 RUN on="%${COMPILER}@${COMPILER_VERSION}" && \
-    spack install --fail-fast cmake python@3.11 yaml-cpp $on boost $on ${LAPACK_SPEC} $on && \
+    spack install --fail-fast cmake python@3.11 yaml-cpp $on ${BOOST_SPEC} $on ${LAPACK_SPEC} $on && \
     spack gc -y && \
     spack clean -sdfmp
 
