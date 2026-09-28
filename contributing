@@ -25,9 +25,10 @@ Some conventions worth following, and why:
 - **Keep build steps chunked.** Installing packages a few at a time, stable ones first,
   means a version bump late in the recipe does not invalidate the whole layer cache.
 - **Clean up package manager caches in the same `RUN`** that installed things, or the
-  cache ends up in the layer regardless. Follow every Spack install with `spack clean -a`,
-  and use `pip install --no-cache-dir` for image builds. Spack's `clean` preserves installed
-  packages and bootstrap tools; `gc` removes dependencies and needs separate consideration.
+  cache ends up in the layer regardless. Follow every Spack install with `spack clean -sdfmp`
+  (not `-a`, which in spack 1.x also deletes the bootstrapped solver and gpg, so the next
+  step downloads them again), and use `pip install --no-cache-dir` for image builds. `gc`
+  removes dependencies and needs separate consideration.
 - **Set ownership when creating files.** Run pip as the runtime user. Recursive `chmod`
   or `chown` of inherited software can copy gigabytes into another layer.
 
