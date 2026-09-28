@@ -233,7 +233,7 @@ RUN mkdir -p /etc/e3sm && \
         echo "export E3SM_TORCH_SPEC=torch==2.13.0+cu130"; } > /etc/e3sm/cuda-flavor.sh; \
     else \
       { echo "export CUDA_FROM_SPACK=yes"; \
-        echo "export E3SM_CUPY_PKG=cupy"; \
+        echo "export E3SM_CUPY_PKG=cupy-cuda12x"; \
         echo "export E3SM_TORCH_INDEX=https://download.pytorch.org/whl/cu124"; \
         echo "export E3SM_TORCH_SPEC=torch==2.6.0+cu124"; } > /etc/e3sm/cuda-flavor.sh; \
     fi
@@ -387,7 +387,8 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.
 # The activation hook is guarded so the login shell of the RUN that creates it still works.
-# The plain "cupy" sdist builds from source and must link against driver stubs.
+# cupy comes as the prebuilt wheel for the CUDA major version (cupy-cuda12x/13x), never the
+# plain "cupy" sdist, which compiled from source for ~25 min; --only-binary keeps it that way.
 RUN echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
 USER ${E3SM_USER}
@@ -398,10 +399,8 @@ RUN source /etc/e3sm/cuda-flavor.sh && \
     python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
         pyyaml pylint netCDF4 psutil pybind11 mpi4py packaging xarray numpy && \
-    if [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
-      LIBRARY_PATH="$CUDA_HOME/lib64/stubs:$LIBRARY_PATH" python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
-    elif [ -n "${E3SM_CUPY_PKG}" ]; then \
-      python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
+    if [ -n "${E3SM_CUPY_PKG}" ]; then \
+      python3 -m pip install --no-cache-dir --only-binary=:all: "${E3SM_CUPY_PKG}"; \
     fi && \
     python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
 
