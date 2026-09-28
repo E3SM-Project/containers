@@ -161,6 +161,7 @@ RUN microdnf -y install \
         gcc-toolset-${GCC_TOOLSET}-gcc \
         gcc-toolset-${GCC_TOOLSET}-gcc-c++ \
         gcc-toolset-${GCC_TOOLSET}-gcc-gfortran \
+        gcc-toolset-${GCC_TOOLSET}-libatomic-devel \
     && microdnf clean all \
     && rm -rf /var/cache/dnf && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
@@ -188,17 +189,19 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # shadow the system ones and break rpm/microdnf TLS.
 
 # 10. Packages that depend only on the compiler, not on MPI or CUDA
-# BOOST_SPEC is boost@1.86.0 for intel (what the spack 0.23 images had): 1.90's b2 fails to
-# install with the intel toolset. gcc keeps the cache's 1.90.
+# A BOOST_SPEC that names its own compiler is used as is: the intel env builds boost with gcc,
+# since b2 fails to install it with the intel toolset (both 1.86 and 1.90), and icpx uses
+# gcc's libstdc++ anyway, so the two are ABI-compatible.
 ARG LAPACK_SPEC=openblas
 ARG BOOST_SPEC=boost
 RUN on="%${COMPILER}@${COMPILER_VERSION}" && \
-    spack install --fail-fast cmake python@3.11 yaml-cpp $on ${BOOST_SPEC} $on ${LAPACK_SPEC} $on && \
+    case "${BOOST_SPEC}" in *%*) boost="${BOOST_SPEC}" ;; *) boost="${BOOST_SPEC} $on" ;; esac && \
+    spack install --fail-fast cmake python@3.11 yaml-cpp $on $boost ${LAPACK_SPEC} $on && \
     spack gc -y && \
     spack clean -sdfmp
 
 ARG MPI_SPEC=openmpi@4.1.4
-ARG DEBUG_SPECS="valgrind@3.20~mpi gdb@13.1"
+ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no
 ARG WITH_MOAB=yes
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
@@ -282,11 +285,12 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       spack clean -sdfmp; \
     fi
 
-# 14. Debugging tools
-RUN if [ -n "${DEBUG_SPECS}" ]; then \
-      spack install --fail-fast ${DEBUG_SPECS} && \
-      spack gc -y && \
-      spack clean -sdfmp; \
+# 14. Debugging tools, from RHEL rather than spack: they are not linked into anything, and
+# the RPMs (gdb 16, valgrind 3.26) install in seconds where spack builds took minutes.
+RUN if [ "${WITH_DEBUG_TOOLS}" = "yes" ]; then \
+      env -u LD_LIBRARY_PATH microdnf -y install gdb valgrind valgrind-devel && \
+      microdnf clean all && \
+      rm -rf /var/cache/dnf; \
     fi
 
 # Make sure the modules for the installed packages are all available
@@ -297,7 +301,7 @@ RUN spack module lmod refresh -y --delete-tree
 # NOTE: the LMOD env vars silence warnings about module version swaps/reloads.
 RUN mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
     { echo "source /etc/profile.d/modules.sh"; \
-      echo "export MODULEPATH=/modulefiles/${SPACK_ARCH}/Core"; \
+      echo "export MODULEPATH=/modulefiles/Core"; \
       echo "export LMOD_EXPERT=1"; \
       echo "export LMOD_DISABLE_WARNINGS=yes"; \
       echo "module purge"; \
@@ -306,7 +310,6 @@ RUN mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       echo "module load $(mods ${LAPACK_SPEC})"; \
       echo "module load $(mods ${MPI_SPEC})"; \
       echo "module load hdf5 netcdf-c netcdf-fortran parallel-netcdf"; \
-      [ -n "${DEBUG_SPECS}" ] && echo "module load $(mods ${DEBUG_SPECS})"; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there

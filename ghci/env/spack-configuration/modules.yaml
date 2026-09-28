@@ -1,5 +1,9 @@
 modules:
   default:
+    # One tree for everything: spack names the arch folder after each spec's os, so without
+    # this, binaries reused from the cache (os=rocky9) and those built here (os=rhel9) would
+    # land in two different Core directories.
+    arch_folder: false
     enable:
       - lmod
     roots:

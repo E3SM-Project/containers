@@ -146,7 +146,7 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=openblas
-              DEBUG_SPECS=valgrind@3.20~mpi gdb@13.1
+              WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
           - env: gnu-cuda-env
@@ -157,7 +157,7 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=mpich@4.1.1
               LAPACK_SPEC=openblas
-              DEBUG_SPECS=
+              WITH_DEBUG_TOOLS=no
               WITH_CUDA=yes
               WITH_MOAB=no
           # Intel oneAPI ships for x86_64 only
@@ -169,8 +169,8 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
-              BOOST_SPEC=boost@1.86.0
-              DEBUG_SPECS=valgrind@3.20~mpi
+              BOOST_SPEC=boost %gcc
+              WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=no
     with:
