@@ -157,8 +157,9 @@ contains
     end subroutine check
 end program nf
 F90
+# netcdf-c lives in its own prefix, which nf-config --flibs does not add a -L for.
 # shellcheck disable=SC2046
-mpifort nf.f90 -o nf $(nf-config --fflags) $(nf-config --flibs)
+mpifort nf.f90 -o nf $(nf-config --fflags) $(nf-config --flibs) $(nc-config --libs)
 ./nf
 
 step "parallel netCDF-4 (HDF5) and PnetCDF, 2 ranks"
