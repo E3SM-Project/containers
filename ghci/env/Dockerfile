@@ -93,8 +93,8 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
 
 # 7. Shell environment
-# `bind` only works interactively, and every RUN below is a non-interactive login shell
-# that sources this file, so guard it to keep builds free of warnings.
+# `bind` only works interactively, and every RUN below is a non-interactive shell that
+# sources this file (via /etc/profile), so guard it to keep builds free of warnings.
 RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
     echo '  bind "\"\\e[A\": history-search-backward"' >> /etc/profile.d/eamxx-env.sh && \
     echo '  bind "\"\\e[B\": history-search-forward"' >> /etc/profile.d/eamxx-env.sh && \
@@ -123,21 +123,24 @@ RUN case "$(uname -m)" in \
     esac && \
     echo "export SPACK_ARCH=linux-rhel9-${target}" > /etc/profile.d/spack-arch.sh
 
-SHELL ["/bin/bash", "-lc"]
+# Every RUN from here on starts with `. /etc/profile`, which loads /etc/profile.d (SPACK_ARCH,
+# the compiler, and later the modules and venv). Not `SHELL ["/bin/bash", "-lc"]`: SHELL is
+# Docker-format only, so podman/buildah (OCI format, their default) ignore it and nothing in
+# /etc/profile.d would be seen. /bin/sh is bash on UBI9, so the bash syntax below still works.
 
 ARG SPACK_VER=v1.2.2
 ENV SPACK_ROOT=/spack \
     SPACK_SYSTEM_CONFIG_PATH=/spack-configuration \
     PATH=/spack/bin:$PATH
 
-RUN git clone --depth 1 --branch "${SPACK_VER}" https://github.com/spack/spack.git /spack
+RUN . /etc/profile && git clone --depth 1 --branch "${SPACK_VER}" https://github.com/spack/spack.git /spack
 
 COPY spack-configuration/ /spack-configuration/
 
 # Pin every package to this arch's generic target (see above), fetch the pinned package
 # recipes, bootstrap spack's solver, and trust the binary cache's signing keys -- once, here,
 # so no later step or runtime user has to.
-RUN sed -i "s/@SPACK_TARGET@/${SPACK_ARCH##*-}/" /spack-configuration/packages.yaml && \
+RUN . /etc/profile && sed -i "s/@SPACK_TARGET@/${SPACK_ARCH##*-}/" /spack-configuration/packages.yaml && \
     spack repo update && \
     spack bootstrap now && \
     yes | spack buildcache keys --install --trust && \
@@ -162,7 +165,7 @@ ENV COMPILER=${COMPILER}
 # NOTE: gcc-toolset drags in environment-modules (via scl-utils, even with weak deps off),
 # whose /etc/profile.d/modules.sh overwrites Lmod's: `module` then becomes Tcl modules, which
 # cannot read spack's .lua modulefiles, and nothing loads. Put Lmod's hooks back, and check.
-RUN cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
+RUN . /etc/profile && cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
     microdnf -y install \
         gcc-toolset-${GCC_TOOLSET}-gcc \
         gcc-toolset-${GCC_TOOLSET}-gcc-c++ \
@@ -188,7 +191,7 @@ RUN cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
 # because otherwise spack may reuse the cache's ubuntu24.04 build of it (made with a newer
 # oneAPI, and linked against a newer glibc than UBI9 has): spack only checks os/libc
 # compatibility for binaries that record a libc dependency, which oneAPI-built ones do not.
-RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
+RUN . /etc/profile && if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
       spack install --fail-fast ${COMPILER_SPEC} ^patchelf %gcc && \
       rm -rf "$(spack location -i ${COMPILER_SPEC})"/compiler/*/opt/oclfpga && \
       spack gc -y && \
@@ -210,7 +213,7 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # gcc's libstdc++ anyway, so the two are ABI-compatible.
 ARG LAPACK_SPEC=openblas
 ARG BOOST_SPEC=boost
-RUN on="%${COMPILER_SPEC}" && \
+RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
     case "${BOOST_SPEC}" in *%*) boost="${BOOST_SPEC}" ;; *) boost="${BOOST_SPEC} $on" ;; esac && \
     spack install --fail-fast cmake python@3.11 yaml-cpp $on $boost ${LAPACK_SPEC} $on && \
     spack gc -y && \
@@ -230,7 +233,7 @@ ARG TORCH_SPEC=torch
 # NOTE: these are exported as E3SM_* rather than reusing the TORCH_*/CUPY_* names. A name
 # that is also an ARG gets substituted by Docker into the instruction text before the shell
 # ever runs, so an export of the same name is silently ignored.
-RUN mkdir -p /etc/e3sm && \
+RUN . /etc/profile && mkdir -p /etc/e3sm && \
     if [ "${WITH_CUDA}" != "yes" ]; then \
       { echo "export CUDA_FROM_SPACK=no"; \
         echo "export E3SM_CUPY_PKG="; \
@@ -253,7 +256,7 @@ RUN mkdir -p /etc/e3sm && \
 # Fetch the GPG key with curl rather than letting `rpm --import` do it, and run rpm and
 # microdnf with `env -u LD_LIBRARY_PATH`: their libcurl must not pick up a spack libssl
 # that cannot verify the system CA bundle.
-RUN source /etc/e3sm/cuda-flavor.sh && \
+RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "skipping CUDA"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
@@ -272,14 +275,14 @@ RUN source /etc/e3sm/cuda-flavor.sh && \
     fi
 
 # 12. MPI
-RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER_SPEC} && \
+RUN . /etc/profile && spack install --fail-fast ${MPI_SPEC} %${COMPILER_SPEC} && \
     spack gc -y && \
     spack clean -sdfmp
 
 # 13. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first
 # and the cache has other MPIs, so without it spack is free to pick a different MPI for them.
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
-RUN on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
+RUN . /etc/profile && on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
     spack install --fail-fast hdf5+mpi $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
     spack gc -y && \
     spack clean -sdfmp
@@ -294,7 +297,7 @@ RUN on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
 # version/MPI/link flags the vendor script would have used itself. The vendor script's own
 # TPL-reuse feature (REUSE_TPLS=yes by default) will find this already built at the path it
 # expects and skip building zoltan itself. Done for every arch to keep this recipe simple.
-RUN if [ "${WITH_MOAB}" = "yes" ]; then \
+RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
       spec="zoltan@3.901+mpi+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
       spack install --fail-fast $spec && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
@@ -305,19 +308,19 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
 
 # 14. Debugging tools, from RHEL rather than spack: they are not linked into anything, and
 # the RPMs (gdb 16, valgrind 3.26) install in seconds where spack builds took minutes.
-RUN if [ "${WITH_DEBUG_TOOLS}" = "yes" ]; then \
+RUN . /etc/profile && if [ "${WITH_DEBUG_TOOLS}" = "yes" ]; then \
       env -u LD_LIBRARY_PATH microdnf -y install gdb valgrind valgrind-devel && \
       microdnf clean all && \
       rm -rf /var/cache/dnf; \
     fi
 
 # Make sure the modules for the installed packages are all available
-RUN spack module lmod refresh -y --delete-tree
+RUN . /etc/profile && spack module lmod refresh -y --delete-tree
 
 # Generate the profile.d script to load them all at bash startup. Module names are the spec
 # names with any @version/+variant/%compiler suffix stripped.
 # NOTE: the LMOD env vars silence warnings about module version swaps/reloads.
-RUN mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
+RUN . /etc/profile && mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
     { echo "source /etc/profile.d/modules.sh"; \
       echo "export MODULEPATH=/modulefiles/Core"; \
       echo "export LMOD_EXPERT=1"; \
@@ -331,7 +334,7 @@ RUN mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
-RUN source /etc/e3sm/cuda-flavor.sh && \
+RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "no CUDA env to add"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
@@ -350,7 +353,7 @@ ARG USERNAME=e3sm
 ARG UID=1000
 ARG GID=1000
 ENV E3SM_USER=${USERNAME}
-RUN mkdir -p /projects/e3sm/software /projects/e3sm/data && \
+RUN . /etc/profile && mkdir -p /projects/e3sm/software /projects/e3sm/data && \
     groupadd -g ${GID} ${USERNAME} && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
@@ -363,7 +366,7 @@ RUN mkdir -p /projects/e3sm/software /projects/e3sm/data && \
 # The vendor script finds openblas on its own but links its static archive, which then also
 # needs -fopenmp (the cached openblas is OpenMP-threaded), -lgfortran and -lm; hand it the
 # shared library instead, which carries those dependencies itself.
-RUN if [ "${WITH_MOAB}" = "yes" ]; then \
+RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
       blas_args=() && \
       case "${LAPACK_SPEC}" in openblas*) \
         lib="-L${BLAS_ROOT}/lib -Wl,-rpath,${BLAS_ROOT}/lib -lopenblas" && \
@@ -395,7 +398,7 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
     fi
 
 # What this image is, for the smoke tests and for anyone inspecting a container
-RUN { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
+RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_MPI=${MPI_SPEC}"; \
       echo "E3SM_LAPACK=${LAPACK_SPEC}"; \
       echo "E3SM_WITH_CUDA=${WITH_CUDA}"; \
@@ -404,14 +407,15 @@ RUN { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
 
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.
-# The activation hook is guarded so the login shell of the RUN that creates it still works.
+# The activation hook is guarded so the RUN that creates the venv, which sources profile.d
+# before the venv exists, still works.
 # cupy comes as the prebuilt wheel for the CUDA major version (cupy-cuda12x/13x), never the
 # plain "cupy" sdist, which compiled from source for ~25 min; --only-binary keeps it that way.
-RUN echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
+RUN . /etc/profile && echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
 USER ${E3SM_USER}
 ENV HOME=/home/${E3SM_USER}
-RUN source /etc/e3sm/cuda-flavor.sh && \
+RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     python3 -m venv /projects/e3sm/software/eamxx-venv && \
     source /projects/e3sm/software/eamxx-venv/bin/activate && \
     python3 -m pip install --no-cache-dir --upgrade pip && \
