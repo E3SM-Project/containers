@@ -347,7 +347,16 @@ RUN mkdir -p /projects/e3sm/software /projects/e3sm/data && \
 # 16. MOAB
 # NOTE: --machine is E3SM's CIME machine name (config_machines.xml), not this image's
 # name; it stays "ghci-snl" until E3SM renames the machine.
+# The vendor script finds openblas on its own but links its static archive, which then also
+# needs -fopenmp (the cached openblas is OpenMP-threaded), -lgfortran and -lm; hand it the
+# shared library instead, which carries those dependencies itself.
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \
+      blas_args=() && \
+      case "${LAPACK_SPEC}" in openblas*) \
+        lib="-L${BLAS_ROOT}/lib -Wl,-rpath,${BLAS_ROOT}/lib -lopenblas" && \
+        extra="--with-blas=\"$lib\" --with-lapack=\"$lib\"" && \
+        blas_args=(--extra="$extra" --extra-tempestremap="$extra") ;; \
+      esac && \
       env -u LD_LIBRARY_PATH microdnf install -y autoconf automake libtool && \
       microdnf clean all && \
       rm -rf /var/cache/dnf && \
@@ -366,6 +375,7 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
           --compiler gnu                                          \
           --bootstrap-branch=vijaysm/automated-build-scripts      \
           --bootstrap-refresh --yes                               \
+          "${blas_args[@]}"                                       \
           --prefix=/projects/e3sm/software/moab && \
       rm -rf /tmp/e3sm /tmp/install-bootstrap.sh && \
       chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
