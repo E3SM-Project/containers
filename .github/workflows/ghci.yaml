@@ -145,7 +145,7 @@ jobs:
               COMPILER_VERSION=13.3.1
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
-              LAPACK_SPEC=netlib-lapack
+              LAPACK_SPEC=openblas
               DEBUG_SPECS=valgrind@3.20~mpi gdb@13.1
               WITH_CUDA=no
               WITH_MOAB=yes
@@ -156,7 +156,7 @@ jobs:
               COMPILER_VERSION=13.3.1
               GCC_TOOLSET=13
               MPI_SPEC=mpich@4.1.1
-              LAPACK_SPEC=netlib-lapack
+              LAPACK_SPEC=openblas
               DEBUG_SPECS=
               WITH_CUDA=yes
               WITH_MOAB=no

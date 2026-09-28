@@ -180,7 +180,7 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `COMPILER_VERSION` | `13.3.1`                     | for gcc, must be the version `gcc-toolset-<GCC_TOOLSET>` ships |
 | `GCC_TOOLSET`      | `13`                         | UBI9 has 13 (13.3.1), 14 (14.2.1) and 15 (15.2.1) |
 | `MPI_SPEC`         | `openmpi@4.1.4`              | any spack spec, e.g. `openmpi@5.0.10`, `mpich@4.1.1` |
-| `LAPACK_SPEC`      | `netlib-lapack`              | e.g. `openblas`, `intel-oneapi-mkl` |
+| `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
 | `DEBUG_SPECS`      | `valgrind@3.20~mpi gdb@13.1` | empty for none |
 | `WITH_CUDA`        | `no`                         | |
 | `WITH_MOAB`        | `yes`                        | |
@@ -208,7 +208,7 @@ boost, yaml-cpp, and nearly every dependency -- is downloaded in seconds instead
 Whatever the cache does not have (a version, variant or compiler it was not built with) is
 built from source exactly as before; the cache never changes *what* gets installed, only
 how long it takes. In the default gnu-cpu-env, what still builds is openmpi 4 (E4S only has
-openmpi 5), netlib-lapack, the MPI-dependent I/O libraries (E4S builds those against its
+openmpi 5), the MPI-dependent I/O libraries (E4S builds those against its
 own external mpich), zoltan, valgrind and gdb.
 
 The package recipes are pinned to the same release the cache was built from
