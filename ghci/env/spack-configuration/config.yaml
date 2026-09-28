@@ -1,0 +1,9 @@
+config:
+  install_tree:
+    root: /spack-installs
+    projections:
+      all: "{name}/{version}/{hash:7}"
+  # Shared, not per-user (~/.spack), so the runtime user can use the spack the image was
+  # built with without re-fetching anything.
+  misc_cache: /spack-cache/misc
+  source_cache: /spack-cache/source

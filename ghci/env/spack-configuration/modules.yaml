@@ -41,6 +41,11 @@ modules:
           set:
             'BLAS_ROOT': '{prefix}'
             'LAPACK_ROOT': '{prefix}'
+      openblas:
+        environment:
+          set:
+            'BLAS_ROOT': '{prefix}'
+            'LAPACK_ROOT': '{prefix}'
       hdf5:
         environment:
           set:
@@ -57,4 +62,3 @@ modules:
         environment:
           set:
             'PARALLEL_NETCDF_ROOT': '{prefix}'
-

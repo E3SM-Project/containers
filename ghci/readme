@@ -47,8 +47,8 @@ name. The Intel images are `x86_64` only:
 Every env image also carries `less`, `nano`, `screen` and `zip`, so a shell in the image
 the tests run in is usable for debugging.
 
-The intermediate stages these are built from are published the same way: `base`, and
-`gnu-13.3.0` / `intel-2024.1.0`.
+The x86_64 images target `x86_64_v3` (AVX2: Intel Haswell / AMD Zen and newer), which is
+what the binary cache below is built for; the aarch64 images are fully generic.
 
 To pull a specific arch on a host of the other arch (under emulation), ask for the
 platform rather than a different tag:
@@ -128,7 +128,7 @@ The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
   `--group-add $(stat -c %g /path/to/baselines)`; with rootless podman, whose user
   namespace does not map host gids, `--group-add keep-groups`.
 
-Build stages run as root; only the final and `-dev` images switch to `e3sm`.
+Builds run as root; the env and `-dev` images switch to `e3sm` at the end.
 
 ## Important storage & permission guidelines
 
@@ -152,47 +152,75 @@ They persist for the life of the container, which is disposable by design.
 
 ## Manually rebuilding the stack
 
-To test a different compiler or library version, rebuild locally. Each stage builds for the
-arch you are on; there is no arch build arg to set.
+To test a different compiler or library version, rebuild locally. Each image builds for the
+arch you are on; there is no arch build arg to set. Every build arg has the `gnu-cpu-env`
+value as its default, so this alone builds that image:
 
 ```bash
-podman build --tag e3sm-base ghci/base/
-
-podman build \
-  --build-arg BASE_IMAGE=localhost/e3sm-base \
-  --build-arg BASE_TAG=latest \
-  --build-arg COMPILER=gcc \
-  --build-arg COMPILER_VERSION=14.1.0 \
-  --tag e3sm-compiler:gcc-14.1.0 \
-  ghci/compiler/
-
-podman build \
-  --build-arg BASE_IMAGE=localhost/e3sm-compiler \
-  --build-arg BASE_TAG=gcc-14.1.0 \
-  --build-arg WITH_MOAB=yes \
-  --tag e3sm-env:gnu-cpu-env-gcc14 \
-  ghci/final/
+podman build --tag e3sm-env:gnu-cpu-env ghci/env/
 ```
+
+and, for example, gcc 15 with openmpi 5:
+
+```bash
+podman build \
+  --build-arg GCC_TOOLSET=15 \
+  --build-arg COMPILER_VERSION=15.2.1 \
+  --build-arg MPI_SPEC=openmpi@5.0.10 \
+  --tag e3sm-env:gnu15-cpu-env \
+  ghci/env/
+```
+
+The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` matrix in
+`.github/workflows/ghci.yaml` for the published variants):
+
+| Arg                | Default                      | Notes |
+|--------------------|------------------------------|-------|
+| `COMPILER`         | `gcc`                        | or `intel-oneapi-compilers` |
+| `COMPILER_VERSION` | `13.3.1`                     | for gcc, must be the version `gcc-toolset-<GCC_TOOLSET>` ships |
+| `GCC_TOOLSET`      | `13`                         | UBI9 has 13 (13.3.1), 14 (14.2.1) and 15 (15.2.1) |
+| `MPI_SPEC`         | `openmpi@4.1.4`              | any spack spec, e.g. `openmpi@5.0.10`, `mpich@4.1.1` |
+| `LAPACK_SPEC`      | `netlib-lapack`              | e.g. `openblas`, `intel-oneapi-mkl` |
+| `DEBUG_SPECS`      | `valgrind@3.20~mpi gdb@13.1` | empty for none |
+| `WITH_CUDA`        | `no`                         | |
+| `WITH_MOAB`        | `yes`                        | |
 
 ## How the images are put together
 
-`base` -> `<compiler>-<version>` -> `<compiler>-<backend>-env` -> `<env>-dev`, each stage
-building `FROM` the tag the previous one published. That is four Dockerfiles, not one per
-variant: `ghci/final/Dockerfile` builds every env from build args (MPI, LAPACK, CUDA,
-MOAB, debug tools, torch flavor), and the variant list is the `final-env` matrix in
-`.github/workflows/ghci.yaml`. `ghci/dev/Dockerfile` is likewise one recipe for all the
-`-dev` images.
+`<compiler>-<backend>-env` -> `<env>-dev`. That is two Dockerfiles, not one per variant:
+`ghci/env/Dockerfile` builds every env from build args, and the variant list is the `env`
+matrix in `.github/workflows/ghci.yaml`. `ghci/dev/Dockerfile` is likewise one recipe for
+all the `-dev` images, built `FROM` the env tag.
 
-Packages that depend only on the compiler -- cmake, yaml-cpp, boost -- are built in the
-compiler stage, so the envs sharing a compiler share them instead of each rebuilding cmake
-from source.
+The env Dockerfile is ordered from most to least shared: system packages and spack first
+(no build args involved, so every variant on a runner reuses those layers), then the
+compiler, then the spack stack in chunks, then the python venv.
 
-Nothing here is parameterized by arch. `base` writes `SPACK_ARCH=linux-rhel9-$(uname -m)`
-into `/etc/profile.d/spack-arch.sh` at build time, so every stage picks up the right
-target on its own (profile.d rather than `ENV`, since `ENV` cannot be computed at build
-time -- hence the `bash --login` CMD and the `bash -lc` SHELL). CI builds each arch
-natively, pushes by digest, and merges the digests into one manifest list per tag; see
-`.github/workflows/build-multiarch.yaml`.
+**Compilers.** gcc is not built: it is RHEL's `gcc-toolset-N`, enabled for login shells
+from `/etc/profile.d/gcc-toolset.sh`. Intel oneAPI is installed by spack (a download, not a
+build) and loaded as an lmod module.
+
+**The binary cache.** Spack is configured (`ghci/env/spack-configuration/`) to reuse
+prebuilt binaries from the [E4S](https://oaciss.uoregon.edu/e4s/inventory.html) build
+cache, `https://cache.e4s.io/26.06`. Its rocky9 stack matches UBI9 (same glibc, 2.34) and
+is built with `gcc-toolset-13`, so with gcc 13.3.1 most of the tree -- cmake, python,
+boost, yaml-cpp, and nearly every dependency -- is downloaded in seconds instead of built.
+Whatever the cache does not have (a version, variant or compiler it was not built with) is
+built from source exactly as before; the cache never changes *what* gets installed, only
+how long it takes. In the default gnu-cpu-env, what still builds is openmpi 4 (E4S only has
+openmpi 5), netlib-lapack, the MPI-dependent I/O libraries (E4S builds those against its
+own external mpich), zoltan, valgrind and gdb.
+
+The package recipes are pinned to the same release the cache was built from
+(`repos.yaml`), so the two move together: to bump, change the spack version in the
+Dockerfile, the `tag` in `repos.yaml` and the E4S release in `mirrors.yaml` at once.
+
+Nothing here is parameterized by arch. The image writes `SPACK_ARCH=linux-rhel9-<target>`
+into `/etc/profile.d/spack-arch.sh` at build time and pins spack to that target, so each
+arch picks up the right one on its own (profile.d rather than `ENV`, since `ENV` cannot be
+computed at build time -- hence the `bash --login` CMD and the `bash -lc` SHELL). CI builds
+each arch natively, pushes by digest, and merges the digests into one manifest list per
+tag; see `.github/workflows/build-multiarch.yaml`.
 
 ## Relationship to `ghci-snl`
 

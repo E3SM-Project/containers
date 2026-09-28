@@ -1,0 +1,11 @@
+concretizer:
+  reuse: true
+  targets:
+    # Generic targets only (x86_64_v3, aarch64), never the build host's microarch, so the
+    # image runs on any host of its arch and matches what the binary cache is built for.
+    # The exact target is required in packages.yaml, written at build time by the Dockerfile.
+    granularity: generic
+    host_compatible: false
+  # Binaries built on these oses are ABI-compatible with UBI9 (same or older glibc).
+  os_compatible:
+    rhel9: [rocky9]
