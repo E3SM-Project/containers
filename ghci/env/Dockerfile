@@ -155,13 +155,15 @@ RUN spack config --scope system add "packages:all:require:[target=${SPACK_ARCH##
     spack repo update && \
     spack bootstrap now && \
     yes | spack buildcache keys --install --trust && \
-    spack clean -a
+    spack clean -sdfmp
 
 # 9. Compiler
 # gcc comes from RHEL's gcc-toolset-N packages rather than being built: UBI9 carries 13
 # (13.3.1), 14 and 15, so COMPILER_VERSION picks one, and the E4S cache is built with
 # gcc-toolset-13, so gcc 13.3.1 gets the most cache hits. The intel image still needs gcc
 # (to build what oneAPI is not used for) and gets oneAPI itself from spack.
+# That gcc is lmod's core compiler: what it builds goes in Core, and what oneAPI builds
+# appears once the intel-oneapi-compilers module is loaded.
 ARG COMPILER=gcc
 ARG COMPILER_VERSION=13.3.1
 ARG GCC_TOOLSET=13
@@ -175,14 +177,15 @@ RUN microdnf -y install \
     && microdnf clean all \
     && rm -rf /var/cache/dnf && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
-    spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin
+    spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin && \
+    spack config --scope system add "modules:default:lmod:core_compilers:[gcc@$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)]"
 
 # The FPGA components are stripped to satisfy security scanners.
 RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
       spack install --fail-fast ${COMPILER}@${COMPILER_VERSION} && \
       rm -rf "$(spack location -i ${COMPILER}@${COMPILER_VERSION})"/compiler/*/opt/oclfpga && \
       spack gc -y && \
-      spack clean -a; \
+      spack clean -sdfmp; \
     fi
 
 # Every E3SM-facing library below is built with "%${COMPILER}@${COMPILER_VERSION}", so it
@@ -196,7 +199,7 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 RUN spack install --fail-fast cmake python@3.11 && \
     spack install --fail-fast yaml-cpp %${COMPILER}@${COMPILER_VERSION} boost %${COMPILER}@${COMPILER_VERSION} && \
     spack gc -y && \
-    spack clean -a
+    spack clean -sdfmp
 
 ARG MPI_SPEC=openmpi@4.1.4
 ARG LAPACK_SPEC=netlib-lapack
@@ -233,7 +236,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 # 11. LAPACK provider
 RUN spack install --fail-fast ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
     spack gc -y && \
-    spack clean -a
+    spack clean -sdfmp
 
 # 12. CUDA. On the NVIDIA-repo path, install compiler+libraries only, NOT the "cuda-toolkit"
 # meta-package: it pulls in nsight-systems, which needs GUI libs this headless image lacks.
@@ -245,7 +248,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
       spack install --fail-fast cuda@12.4.0 && \
       spack gc -y && \
-      spack clean -a; \
+      spack clean -sdfmp; \
     else \
       curl -fsSL "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo" \
           -o /etc/yum.repos.d/cuda-rhel9.repo && \
@@ -260,7 +263,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 # 13. MPI
 RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
     spack gc -y && \
-    spack clean -a
+    spack clean -sdfmp
 
 # 14. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first,
 # so without it these would only match the MPI above by virtue of spack reusing it.
@@ -268,7 +271,7 @@ RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
 RUN on="%${COMPILER}@${COMPILER_VERSION} ^${MPI_SPEC}" && \
     spack install --fail-fast hdf5+mpi $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
     spack gc -y && \
-    spack clean -a
+    spack clean -sdfmp
 
 # MOAB's "zoltan" TPL, as fetched by the vendor install-bootstrap.sh script further down
 # from its default (circa-2013) dist tarball mirror, ships a bundled config.guess/
@@ -286,14 +289,14 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       mkdir -p /projects/e3sm/software/moab/tpls && \
       ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab/tpls/zoltan && \
       spack gc -y && \
-      spack clean -a; \
+      spack clean -sdfmp; \
     fi
 
 # 15. Debugging tools
 RUN if [ -n "${DEBUG_SPECS}" ]; then \
       spack install --fail-fast ${DEBUG_SPECS} && \
       spack gc -y && \
-      spack clean -a; \
+      spack clean -sdfmp; \
     fi
 
 # Make sure the modules for the installed packages are all available
