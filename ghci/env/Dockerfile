@@ -92,21 +92,7 @@ ENV LANG=en_US.UTF-8 \
     LC_CTYPE=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
 
-# 7. Project directory, shell environment and the default non-root user.
-# MPI refuses to run as root, and files written to bind mounts should not come back owned
-# by root. uid/gid 1000 is the usual first host user, so mounts line up without --userns.
-# Builds stay root; the image switches to this user at the end.
-ARG USERNAME=e3sm
-ARG UID=1000
-ARG GID=1000
-ENV E3SM_USER=${USERNAME}
-RUN mkdir -p /projects/e3sm/software /projects/e3sm/data && \
-    groupadd -g ${GID} ${USERNAME} && \
-    useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
-    chmod 0440 /etc/sudoers.d/${USERNAME} && \
-    chown -R ${USERNAME}:${USERNAME} /projects/e3sm
-
+# 7. Shell environment
 # `bind` only works interactively, and every RUN below is a non-interactive login shell
 # that sources this file, so guard it to keep builds free of warnings.
 RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
@@ -162,8 +148,9 @@ RUN sed -i "s/@SPACK_TARGET@/${SPACK_ARCH##*-}/" /spack-configuration/packages.y
 # (13.3.1), 14 and 15, so COMPILER_VERSION picks one, and the E4S cache is built with
 # gcc-toolset-13, so gcc 13.3.1 gets the most cache hits. The intel image still needs gcc
 # (to build what oneAPI is not used for) and gets oneAPI itself from spack.
-# That gcc is lmod's core compiler: what it builds goes in Core, and what oneAPI builds
-# appears once the intel-oneapi-compilers module is loaded.
+# That gcc is lmod's core compiler, and so is gcc 13.3.1, which built what comes from the
+# cache: what they build goes in Core, and what oneAPI builds appears once the
+# intel-oneapi-compilers module is loaded.
 ARG COMPILER=gcc
 ARG COMPILER_VERSION=13.3.1
 ARG GCC_TOOLSET=13
@@ -178,11 +165,14 @@ RUN microdnf -y install \
     && rm -rf /var/cache/dnf && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
     spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin && \
-    spack config --scope system add "modules:default:lmod:core_compilers:[gcc@$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)]"
+    spack config --scope system add "modules:default:lmod:core_compilers:[gcc@13.3.1,gcc@$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)]"
 
-# The FPGA components are stripped to satisfy security scanners.
+# The FPGA components are stripped to satisfy security scanners. patchelf is pinned to gcc
+# because otherwise spack may reuse the cache's ubuntu24.04 build of it (made with a newer
+# oneAPI, and linked against a newer glibc than UBI9 has): spack only checks os/libc
+# compatibility for binaries that record a libc dependency, which oneAPI-built ones do not.
 RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
-      spack install --fail-fast ${COMPILER}@${COMPILER_VERSION} && \
+      spack install --fail-fast ${COMPILER}@${COMPILER_VERSION} ^patchelf %gcc && \
       rm -rf "$(spack location -i ${COMPILER}@${COMPILER_VERSION})"/compiler/*/opt/oclfpga && \
       spack gc -y && \
       spack clean -sdfmp; \
@@ -191,18 +181,20 @@ RUN if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # Every E3SM-facing library below is built with "%${COMPILER}@${COMPILER_VERSION}", so it
 # links against what E3SM itself is compiled with. Dependencies below those roots (zlib,
 # openssl, ...) and the tools (cmake, python) may come from the cache built with gcc.
+# NOTE: in spack 1.x "%compiler" binds to the one spec it follows, so it is repeated per
+# root rather than given once at the end.
 # NOTE: installed but deliberately NOT module-loaded until the end. Loading them puts
 # spack's libcurl/libssl (cmake's deps) on LD_LIBRARY_PATH for every later RUN, where they
 # shadow the system ones and break rpm/microdnf TLS.
 
-# 10. Packages that do not depend on the variant choices below
-RUN spack install --fail-fast cmake python@3.11 && \
-    spack install --fail-fast yaml-cpp %${COMPILER}@${COMPILER_VERSION} boost %${COMPILER}@${COMPILER_VERSION} && \
+# 10. Packages that depend only on the compiler, not on MPI or CUDA
+ARG LAPACK_SPEC=openblas
+RUN on="%${COMPILER}@${COMPILER_VERSION}" && \
+    spack install --fail-fast cmake python@3.11 yaml-cpp $on boost $on ${LAPACK_SPEC} $on && \
     spack gc -y && \
     spack clean -sdfmp
 
 ARG MPI_SPEC=openmpi@4.1.4
-ARG LAPACK_SPEC=netlib-lapack
 ARG DEBUG_SPECS="valgrind@3.20~mpi gdb@13.1"
 ARG WITH_CUDA=no
 ARG WITH_MOAB=yes
@@ -233,12 +225,7 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
         echo "export E3SM_TORCH_SPEC=torch==2.6.0+cu124"; } > /etc/profile.d/cuda-flavor.sh; \
     fi
 
-# 11. LAPACK provider
-RUN spack install --fail-fast ${LAPACK_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
-    spack gc -y && \
-    spack clean -sdfmp
-
-# 12. CUDA. On the NVIDIA-repo path, install compiler+libraries only, NOT the "cuda-toolkit"
+# 11. CUDA. On the NVIDIA-repo path, install compiler+libraries only, NOT the "cuda-toolkit"
 # meta-package: it pulls in nsight-systems, which needs GUI libs this headless image lacks.
 # Fetch the GPG key with curl rather than letting `rpm --import` do it, and run rpm and
 # microdnf with `env -u LD_LIBRARY_PATH`: their libcurl must not pick up a spack libssl
@@ -260,13 +247,13 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
       rm -rf /var/cache/dnf; \
     fi
 
-# 13. MPI
+# 12. MPI
 RUN spack install --fail-fast ${MPI_SPEC} %${COMPILER}@${COMPILER_VERSION} && \
     spack gc -y && \
     spack clean -sdfmp
 
-# 14. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first,
-# so without it these would only match the MPI above by virtue of spack reusing it.
+# 13. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first
+# and the cache has other MPIs, so without it spack is free to pick a different MPI for them.
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
 RUN on="%${COMPILER}@${COMPILER_VERSION} ^${MPI_SPEC}" && \
     spack install --fail-fast hdf5+mpi $on netcdf-c+mpi $on netcdf-fortran $on parallel-netcdf $on && \
@@ -292,7 +279,7 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       spack clean -sdfmp; \
     fi
 
-# 15. Debugging tools
+# 14. Debugging tools
 RUN if [ -n "${DEBUG_SPECS}" ]; then \
       spack install --fail-fast ${DEBUG_SPECS} && \
       spack gc -y && \
@@ -330,28 +317,22 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
         echo 'export LD_LIBRARY_PATH=$CUDA_HOME/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}'; } >> /etc/profile.d/eamxx-env.sh; \
     fi
 
-# 16. Python venv, created and populated as the runtime user: doing this under root and
-# later recursively changing ownership duplicates the complete environment in a new layer.
-# The plain "cupy" sdist builds from source and must link against driver stubs.
-USER ${E3SM_USER}
-ENV HOME=/home/${E3SM_USER}
-RUN python3 -m venv /projects/e3sm/software/eamxx-venv && \
-    source /projects/e3sm/software/eamxx-venv/bin/activate && \
-    python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
-        pyyaml pylint netCDF4 psutil pybind11 mpi4py packaging xarray numpy && \
-    if [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
-      LIBRARY_PATH="$CUDA_HOME/lib64/stubs:$LIBRARY_PATH" python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
-    elif [ -n "${E3SM_CUPY_PKG}" ]; then \
-      python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
-    fi && \
-    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
+# 15. The default non-root user
+# MPI refuses to run as root, and files written to bind mounts should not come back owned
+# by root. uid/gid 1000 is the usual first host user, so mounts line up without --userns.
+# Builds stay root; the image switches to this user for the python venv and stays there.
+ARG USERNAME=e3sm
+ARG UID=1000
+ARG GID=1000
+ENV E3SM_USER=${USERNAME}
+RUN mkdir -p /projects/e3sm/software /projects/e3sm/data && \
+    groupadd -g ${GID} ${USERNAME} && \
+    useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
+    chmod 0440 /etc/sudoers.d/${USERNAME} && \
+    chown ${USERNAME}:${USERNAME} /projects/e3sm /projects/e3sm/software /projects/e3sm/data
 
-USER root
-ENV HOME=/root
-RUN echo "source /projects/e3sm/software/eamxx-venv/bin/activate" >> /etc/profile.d/eamxx-env.sh
-
-# 17. MOAB
+# 16. MOAB
 # NOTE: --machine is E3SM's CIME machine name (config_machines.xml), not this image's
 # name; it stays "ghci-snl" until E3SM renames the machine.
 RUN if [ "${WITH_MOAB}" = "yes" ]; then \
@@ -378,12 +359,28 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
       chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
     fi
 
-# Done with the flavor file; what it selected is already baked into eamxx-env.sh
-RUN rm -f /etc/profile.d/cuda-flavor.sh
+# 17. Python venv, created and populated as the runtime user: doing this under root and
+# later recursively changing ownership duplicates the complete environment in a new layer.
+# The activation hook is guarded so the login shell of the RUN that creates it still works.
+# The plain "cupy" sdist builds from source and must link against driver stubs. The CUDA
+# flavor file is dropped at the end: what it selected is baked into eamxx-env.sh by then.
+RUN echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
-# Hand the runtime over to the non-root user
 USER ${E3SM_USER}
 ENV HOME=/home/${E3SM_USER}
+RUN python3 -m venv /projects/e3sm/software/eamxx-venv && \
+    source /projects/e3sm/software/eamxx-venv/bin/activate && \
+    python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir \
+        pyyaml pylint netCDF4 psutil pybind11 mpi4py packaging xarray numpy && \
+    if [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
+      LIBRARY_PATH="$CUDA_HOME/lib64/stubs:$LIBRARY_PATH" python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
+    elif [ -n "${E3SM_CUPY_PKG}" ]; then \
+      python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
+    fi && \
+    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}" && \
+    sudo rm -f /etc/profile.d/cuda-flavor.sh
+
 WORKDIR ${HOME}
 
 ENTRYPOINT []
