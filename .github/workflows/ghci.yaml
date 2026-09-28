@@ -142,7 +142,6 @@ jobs:
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
-              COMPILER_VERSION=13.3.1
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=openblas
@@ -153,7 +152,6 @@ jobs:
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
-              COMPILER_VERSION=13.3.1
               GCC_TOOLSET=13
               MPI_SPEC=mpich@4.1.1
               LAPACK_SPEC=openblas
@@ -165,7 +163,7 @@ jobs:
             arches: '["x86_64"]'
             args: |
               COMPILER=intel-oneapi-compilers
-              COMPILER_VERSION=2024.1.0
+              INTEL_VERSION=2024.1.0
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
