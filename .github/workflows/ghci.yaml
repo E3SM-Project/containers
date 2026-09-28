@@ -157,7 +157,7 @@ jobs:
               LAPACK_SPEC=openblas
               WITH_DEBUG_TOOLS=no
               WITH_CUDA=yes
-              WITH_MOAB=no
+              WITH_MOAB=yes
           # Intel oneAPI ships for x86_64 only
           - env: intel-cpu-env
             arches: '["x86_64"]'
@@ -167,10 +167,9 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
-              BOOST_SPEC=boost %gcc
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
-              WITH_MOAB=no
+              WITH_MOAB=yes
     with:
       image_name: e3sm-ghci
       tag: ${{ matrix.env }}

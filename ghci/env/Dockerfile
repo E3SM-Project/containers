@@ -208,11 +208,11 @@ RUN . /etc/profile && if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # shadow the system ones and break rpm/microdnf TLS.
 
 # 10. Packages that depend only on the compiler, not on MPI or CUDA
-# A BOOST_SPEC that names its own compiler is used as is: the intel env builds boost with gcc,
-# since b2 fails to install it with the intel toolset (both 1.86 and 1.90), and icpx uses
-# gcc's libstdc++ anyway, so the two are ABI-compatible.
+# boost is pinned to 1.83, what gcam uses; E3SM needs nothing newer (ekat only uses it for
+# backtraces). A BOOST_SPEC that names its own compiler is used as is, otherwise boost is
+# built with the env's compiler like the other E3SM-facing libraries.
 ARG LAPACK_SPEC=openblas
-ARG BOOST_SPEC=boost
+ARG BOOST_SPEC=boost@1.83.0
 RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
     case "${BOOST_SPEC}" in *%*) boost="${BOOST_SPEC}" ;; *) boost="${BOOST_SPEC} $on" ;; esac && \
     spack install --fail-fast cmake python@3.11 yaml-cpp $on $boost ${LAPACK_SPEC} $on && \
@@ -363,16 +363,27 @@ RUN . /etc/profile && mkdir -p /projects/e3sm/software /projects/e3sm/data && \
 # 16. MOAB
 # NOTE: --machine is E3SM's CIME machine name (config_machines.xml), not this image's
 # name; it stays "ghci-snl" until E3SM renames the machine.
-# The vendor script finds openblas on its own but links its static archive, which then also
-# needs -fopenmp (the cached openblas is OpenMP-threaded), -lgfortran and -lm; hand it the
-# shared library instead, which carries those dependencies itself.
+# --compiler is the CIME compiler name on that machine: gnu (also for the CUDA image; MOAB
+# itself is CPU code) or intel.
+# BLAS/LAPACK: the vendor script links openblas's static archive, which then also needs
+# -fopenmp (the cached openblas is OpenMP-threaded), -lgfortran and -lm, and it does not find
+# MKL at all (it probes BLAS_ROOT, which the MKL module does not set); so hand it the link
+# line for both.
 RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
-      blas_args=() && \
-      case "${LAPACK_SPEC}" in openblas*) \
-        lib="-L${BLAS_ROOT}/lib -Wl,-rpath,${BLAS_ROOT}/lib -lopenblas" && \
-        extra="--with-blas=\"$lib\" --with-lapack=\"$lib\"" && \
-        blas_args=(--extra="$extra" --extra-tempestremap="$extra") ;; \
+      case "${COMPILER}" in \
+        gcc) moab_compiler=gnu ;; \
+        intel-oneapi-compilers) moab_compiler=intel ;; \
       esac && \
+      case "${LAPACK_SPEC}" in \
+        openblas*) lib="-L${BLAS_ROOT}/lib -Wl,-rpath,${BLAS_ROOT}/lib -lopenblas" ;; \
+        intel-oneapi-mkl*) lib="-L${MKLROOT}/lib -L${MKLROOT}/lib/intel64 -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl" ;; \
+        *) lib="" ;; \
+      esac && \
+      blas_args=() && \
+      if [ -n "$lib" ]; then \
+        extra="--with-blas=\"$lib\" --with-lapack=\"$lib\"" && \
+        blas_args=(--extra="$extra" --extra-tempestremap="$extra"); \
+      fi && \
       env -u LD_LIBRARY_PATH microdnf install -y autoconf automake libtool && \
       microdnf clean all && \
       rm -rf /var/cache/dnf && \
@@ -388,7 +399,7 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
           --netcdf-root=$NETCDF_C_ROOT                            \
           --pnetcdf-root=$PARALLEL_NETCDF_ROOT                    \
           --machine=ghci-snl                                      \
-          --compiler gnu                                          \
+          --compiler "$moab_compiler"                             \
           --bootstrap-branch=vijaysm/automated-build-scripts      \
           --bootstrap-refresh --yes                               \
           "${blas_args[@]}"                                       \
