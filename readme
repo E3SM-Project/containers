@@ -23,12 +23,14 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 - **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
   `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
   owned by root.
+- **Prebuilt where possible.** Spack stacks reuse binaries from the E4S build cache and
+  build only what it does not have; see [`ghci/readme`](ghci/readme).
 - **Path-scoped builds.** The ghci workflow always reports its required check, but filters
   changes inside the workflow so unrelated edits skip the expensive builds.
 
 Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: write`
-there), so those runs build every stage as validation only, each one FROM the image `main`
-published rather than the one the previous stage just built.
+there), so those runs build every stage as validation only, the `-dev` images FROM the env
+image `main` published rather than the one the same run just built.
 
 See [contributing](contributing) to add a new image.
 

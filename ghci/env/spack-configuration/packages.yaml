@@ -1,0 +1,7 @@
+packages:
+  all:
+    permissions:
+      read: world
+      write: user
+    providers:
+      mpi: [mpich, openmpi, intel-oneapi-mpi]

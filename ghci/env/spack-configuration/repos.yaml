@@ -1,0 +1,7 @@
+# Pin the package recipes to the release the E4S cache below was built from, so the
+# concretizer sees the same versions and variants the cached binaries have.
+repos:
+  builtin:
+    git: https://github.com/spack/spack-packages.git
+    tag: v2026.06.0
+    destination: /spack-packages
