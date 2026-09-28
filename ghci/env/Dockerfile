@@ -219,22 +219,23 @@ ARG TORCH_SPEC=torch
 #            comes from NVIDIA's RHEL9/SBSA repo and is exported by hand.
 # NOTE: these are exported as E3SM_* rather than reusing the TORCH_*/CUPY_* names. A name
 # that is also an ARG gets substituted by Docker into the instruction text before the shell
-# ever runs, so a profile.d export of the same name is silently ignored.
-RUN if [ "${WITH_CUDA}" != "yes" ]; then \
+# ever runs, so an export of the same name is silently ignored.
+RUN mkdir -p /etc/e3sm && \
+    if [ "${WITH_CUDA}" != "yes" ]; then \
       { echo "export CUDA_FROM_SPACK=no"; \
         echo "export E3SM_CUPY_PKG="; \
         echo "export E3SM_TORCH_INDEX=${TORCH_INDEX}"; \
-        echo "export E3SM_TORCH_SPEC=${TORCH_SPEC}"; } > /etc/profile.d/cuda-flavor.sh; \
+        echo "export E3SM_TORCH_SPEC=${TORCH_SPEC}"; } > /etc/e3sm/cuda-flavor.sh; \
     elif [ "$(uname -m)" = "aarch64" ]; then \
       { echo "export CUDA_FROM_SPACK=no"; \
         echo "export E3SM_CUPY_PKG=cupy-cuda13x"; \
         echo "export E3SM_TORCH_INDEX=https://download.pytorch.org/whl/cu130"; \
-        echo "export E3SM_TORCH_SPEC=torch==2.13.0+cu130"; } > /etc/profile.d/cuda-flavor.sh; \
+        echo "export E3SM_TORCH_SPEC=torch==2.13.0+cu130"; } > /etc/e3sm/cuda-flavor.sh; \
     else \
       { echo "export CUDA_FROM_SPACK=yes"; \
         echo "export E3SM_CUPY_PKG=cupy"; \
         echo "export E3SM_TORCH_INDEX=https://download.pytorch.org/whl/cu124"; \
-        echo "export E3SM_TORCH_SPEC=torch==2.6.0+cu124"; } > /etc/profile.d/cuda-flavor.sh; \
+        echo "export E3SM_TORCH_SPEC=torch==2.6.0+cu124"; } > /etc/e3sm/cuda-flavor.sh; \
     fi
 
 # 11. CUDA. On the NVIDIA-repo path, install compiler+libraries only, NOT the "cuda-toolkit"
@@ -242,7 +243,8 @@ RUN if [ "${WITH_CUDA}" != "yes" ]; then \
 # Fetch the GPG key with curl rather than letting `rpm --import` do it, and run rpm and
 # microdnf with `env -u LD_LIBRARY_PATH`: their libcurl must not pick up a spack libssl
 # that cannot verify the system CA bundle.
-RUN if [ "${WITH_CUDA}" != "yes" ]; then \
+RUN source /etc/e3sm/cuda-flavor.sh && \
+    if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "skipping CUDA"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
       spack install --fail-fast cuda@12.4.0 && \
@@ -319,7 +321,8 @@ RUN mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
-RUN if [ "${WITH_CUDA}" != "yes" ]; then \
+RUN source /etc/e3sm/cuda-flavor.sh && \
+    if [ "${WITH_CUDA}" != "yes" ]; then \
       echo "no CUDA env to add"; \
     elif [ "${CUDA_FROM_SPACK}" = "yes" ]; then \
       echo "module load cuda" >> /etc/profile.d/eamxx-env.sh; \
@@ -384,13 +387,13 @@ RUN if [ "${WITH_MOAB}" = "yes" ]; then \
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.
 # The activation hook is guarded so the login shell of the RUN that creates it still works.
-# The plain "cupy" sdist builds from source and must link against driver stubs. The CUDA
-# flavor file is dropped at the end: what it selected is baked into eamxx-env.sh by then.
+# The plain "cupy" sdist builds from source and must link against driver stubs.
 RUN echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
 USER ${E3SM_USER}
 ENV HOME=/home/${E3SM_USER}
-RUN python3 -m venv /projects/e3sm/software/eamxx-venv && \
+RUN source /etc/e3sm/cuda-flavor.sh && \
+    python3 -m venv /projects/e3sm/software/eamxx-venv && \
     source /projects/e3sm/software/eamxx-venv/bin/activate && \
     python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
@@ -400,8 +403,7 @@ RUN python3 -m venv /projects/e3sm/software/eamxx-venv && \
     elif [ -n "${E3SM_CUPY_PKG}" ]; then \
       python3 -m pip install --no-cache-dir "${E3SM_CUPY_PKG}"; \
     fi && \
-    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}" && \
-    sudo rm -f /etc/profile.d/cuda-flavor.sh
+    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
 
 WORKDIR ${HOME}
 
