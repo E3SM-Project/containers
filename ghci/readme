@@ -218,7 +218,9 @@ Dockerfile, the `tag` in `repos.yaml` and the E4S release in `mirrors.yaml` at o
 Nothing here is parameterized by arch. The image writes `SPACK_ARCH=linux-rhel9-<target>`
 into `/etc/profile.d/spack-arch.sh` at build time and pins spack to that target, so each
 arch picks up the right one on its own (profile.d rather than `ENV`, since `ENV` cannot be
-computed at build time -- hence the `bash --login` CMD and the `bash -lc` SHELL). CI builds
+computed at build time -- hence the `bash --login` CMD, and every `RUN` in the Dockerfile
+starting with `. /etc/profile`: a `SHELL` instruction would be simpler, but it only works
+with Docker-format builds, and podman/buildah build OCI images by default). CI builds
 each arch natively, pushes by digest, and merges the digests into one manifest list per
 tag; see `.github/workflows/build-multiarch.yaml`.
 

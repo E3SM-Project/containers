@@ -8,7 +8,9 @@ ARG VARIANT=unknown
 ENV E3SM_ENV=${VARIANT}
 
 USER root
-SHELL ["/bin/bash", "-o", "pipefail", "-lc"]
+# No SHELL instruction: it is Docker-format only, and podman/buildah (OCI format, their
+# default) ignore it. Nothing here needs the login environment; the pipes that must not hide
+# a failed download set pipefail themselves (/bin/sh is bash on UBI9).
 
 # Editors and the usual navigation tools
 # (less, nano, screen and zip come from the env image)
@@ -126,11 +128,11 @@ USER ${E3SM_USER}
 # $HOME, so `uv self update` / `claude update` / `opencode upgrade` / `codex --upgrade`
 # all work inside a running container without root. Deliberately unpinned: pinning would
 # defeat the self-update these are installed for.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-RUN curl -fsSL https://claude.ai/install.sh | bash
-RUN curl -fsSL https://opencode.ai/install | bash
-RUN curl -fsSL https://chatgpt.com/codex/install.sh | sh
-RUN curl -fsSL https://gh.io/copilot-install | bash
+RUN set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN set -o pipefail && curl -fsSL https://claude.ai/install.sh | bash
+RUN set -o pipefail && curl -fsSL https://opencode.ai/install | bash
+RUN set -o pipefail && curl -fsSL https://chatgpt.com/codex/install.sh | sh
+RUN set -o pipefail && curl -fsSL https://gh.io/copilot-install | bash
 
 WORKDIR /projects/e3sm/work
 
