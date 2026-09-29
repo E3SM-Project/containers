@@ -266,9 +266,10 @@ fi
 
 if [ "$E3SM_WITH_MOAB" = yes ]; then
     step "MOAB"
+    # Where E3SM's ghci-snl machine expects it (MOAB_ROOT)
     ls /projects/e3sm/software/moab/lib/libMOAB.so* >/dev/null
-    test -d /projects/e3sm/software/moab/tpls/tempestremap
-    test -d /projects/e3sm/software/moab/tpls/zoltan
+    ls /projects/e3sm/software/moab/lib/libiMOAB.so* >/dev/null
+    test -x /projects/e3sm/software/moab/bin/mbtempest
 fi
 
 if [ "${EXPECT_CUDA:-}" = yes ]; then
