@@ -182,7 +182,7 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
 | `WITH_DEBUG_TOOLS` | `yes`                        | gdb and valgrind, from RHEL |
 | `WITH_CUDA`        | `no`                         | |
-| `WITH_MOAB`        | `yes`                        | MOAB 5.6.0 (with TempestRemap) from spack, linked at `/projects/e3sm/software/moab`, where E3SM's `ghci-snl` machine looks |
+| `WITH_MOAB`        | `yes`                        | MOAB 5.6.0 (with TempestRemap) from spack; its module exports `MOAB_ROOT` |
 
 ## How the images are put together
 

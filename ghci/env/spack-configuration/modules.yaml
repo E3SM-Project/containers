@@ -71,3 +71,7 @@ modules:
         environment:
           set:
             'PARALLEL_NETCDF_ROOT': '{prefix}'
+      moab:
+        environment:
+          set:
+            'MOAB_ROOT': '{prefix}'

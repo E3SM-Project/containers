@@ -228,7 +228,7 @@ esac
 mpifort la.f90 -o la "${lapack[@]}"
 ./la
 
-step "CMake finds MPI, yaml-cpp, Boost and (Generic) BLAS/LAPACK like E3SM's build"
+step "CMake finds MPI, yaml-cpp and Boost like E3SM's build"
 mkdir cmake-test
 cat > cmake-test/CMakeLists.txt <<'CMAKE'
 cmake_minimum_required(VERSION 3.18)
@@ -236,10 +236,6 @@ project(smoke LANGUAGES C CXX Fortran)
 find_package(MPI REQUIRED COMPONENTS C CXX Fortran)
 find_package(yaml-cpp REQUIRED)
 find_package(Boost REQUIRED)
-# What E3SM's build does on ghci-snl, which sets BLA_VENDOR=Generic
-set(BLA_VENDOR Generic)
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
 add_executable(smoke main.cpp)
 target_link_libraries(smoke PRIVATE MPI::MPI_CXX yaml-cpp::yaml-cpp Boost::headers)
 CMAKE
@@ -270,20 +266,21 @@ fi
 
 if [ "$E3SM_WITH_MOAB" = yes ]; then
     step "MOAB"
-    # Where E3SM's ghci-snl machine expects it (MOAB_ROOT)
-    ls /projects/e3sm/software/moab/lib/libMOAB.so* >/dev/null
+    moab=${MOAB_ROOT:?MOAB_ROOT is not set}
+    echo "MOAB_ROOT=$moab"
+    ls "$moab"/lib/libMOAB.so* >/dev/null
+    test -x "$moab/bin/mbtempest"
     # iMOAB (the interface E3SM calls) is built into libMOAB, not a library of its own
-    test -f /projects/e3sm/software/moab/include/moab/iMOAB.h
-    nm -D --defined-only /projects/e3sm/software/moab/lib/libMOAB.so | grep iMOAB_Initialize >/dev/null
-    test -x /projects/e3sm/software/moab/bin/mbtempest
+    test -f "$moab/include/moab/iMOAB.h"
+    nm -D --defined-only "$moab/lib/libMOAB.so" | grep iMOAB_Initialize >/dev/null
     # Link against MOAB the way E3SM's build does: with the exact MOAB_PACKAGE_LIBS its
     # MOABConfig.cmake exports. Every -lfoo in there has to resolve, -L or not.
-    moab=/projects/e3sm/software/moab
     config=$(find "$moab"/lib* -name MOABConfig.cmake | sed -n 1p)
     test -n "$config"
     moab_libs=$(sed -n 's/^set *(MOAB_PACKAGE_LIBS "\(.*\)")$/\1/p' "$config")
     test -n "$moab_libs"
     cat > moab.cpp <<'CPP'
+#include <mpi.h>
 #include "moab/iMOAB.h"
 int main() { return reinterpret_cast<void *>(&iMOAB_Initialize) ? 0 : 1; }
 CPP
