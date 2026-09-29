@@ -218,16 +218,6 @@ RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
     spack gc -y && \
     spack clean -sdfmp
 
-# E3SM's ghci-snl machine sets BLA_VENDOR=Generic, so CMake's FindBLAS/FindLAPACK only look
-# for libraries named blas and lapack. openblas provides both but only as libopenblas, so give
-# it those names too (the usual distro practice); netlib-lapack and MKL need nothing.
-RUN . /etc/profile && case "${LAPACK_SPEC}" in openblas*) \
-      lib="$(spack location -i openblas)/lib" && \
-      for name in blas lapack; do \
-        ln -sf libopenblas.so "$lib/lib$name.so" && ln -sf libopenblas.so "$lib/lib$name.so.3"; \
-      done ;; \
-    esac
-
 ARG MPI_SPEC=openmpi@4.1.4
 ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no
@@ -296,14 +286,12 @@ RUN . /etc/profile && on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
     spack gc -y && \
     spack clean -sdfmp
 
-# MOAB, from spack: TempestRemap, Eigen and Zoltan come along as its dependencies. E3SM's
-# ghci-snl machine expects it at /projects/e3sm/software/moab, so link it there.
+# MOAB, from spack: TempestRemap, Eigen and Zoltan come along as its dependencies. Its module
+# exports MOAB_ROOT, like the other *_ROOT variables.
 # (E3SM's moab recipe keeps Eigen on 3.x; see repos.yaml.)
 RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
       spec="moab@5.6.0+mpi+hdf5+netcdf+pnetcdf+zoltan+eigen+tempest+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
       spack install --fail-fast $spec && \
-      mkdir -p /projects/e3sm/software && \
-      ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab && \
       spack gc -y && \
       spack clean -sdfmp; \
     fi
