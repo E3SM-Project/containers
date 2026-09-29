@@ -167,10 +167,6 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
-              # b2 fails to install boost with the intel toolset (every attempt so far,
-              # even with the Dockerfile's workaround), for a reason not yet understood.
-              # icpx uses gcc's libstdc++, so a gcc-built boost is compatible.
-              BOOST_SPEC=boost@1.83.0 %gcc
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes

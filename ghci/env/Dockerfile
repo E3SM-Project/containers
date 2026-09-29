@@ -208,19 +208,13 @@ RUN . /etc/profile && if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 # shadow the system ones and break rpm/microdnf TLS.
 
 # 10. Packages that depend only on the compiler, not on MPI or CUDA
-# boost is pinned to 1.83, what gcam uses; E3SM needs nothing newer (ekat only uses it for
-# backtraces). b2's `install` sometimes writes BoostConfigVersion.cmake into
-# bin.v2/tools/boost_install before anything has created it, so boost comes from a small
-# override in spack-configuration/repos/spack_repo/e3sm that creates it first, and the install
-# is retried (which only redoes what failed). With the intel toolset it still fails every
-# time, so the intel env builds boost with gcc (see BOOST_SPEC in ghci.yaml). A BOOST_SPEC that names its own compiler is used as is, otherwise boost is
-# built with the env's compiler like the other E3SM-facing libraries.
+# boost is left unconstrained: E3SM only needs its headers (ekat uses it for backtraces), so
+# spack reuses the cache's gcc-built boost in every env, the intel one included (icpx uses
+# gcc's libstdc++). Building it ourselves means b2, whose `install` fails intermittently with
+# gcc and every time with the intel toolset.
 ARG LAPACK_SPEC=openblas
-ARG BOOST_SPEC=boost@1.83.0
 RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
-    case "${BOOST_SPEC}" in *%*) boost="${BOOST_SPEC}" ;; *) boost="${BOOST_SPEC} $on" ;; esac && \
-    pkgs="cmake python@3.11 yaml-cpp $on $boost ${LAPACK_SPEC} $on" && \
-    { spack install --fail-fast $pkgs || spack install --fail-fast $pkgs || spack install --fail-fast $pkgs; } && \
+    spack install --fail-fast cmake python@3.11 boost yaml-cpp $on ${LAPACK_SPEC} $on && \
     spack gc -y && \
     spack clean -sdfmp
 
@@ -292,23 +286,13 @@ RUN . /etc/profile && on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
     spack gc -y && \
     spack clean -sdfmp
 
-# MOAB's "zoltan" TPL, as fetched by the vendor install-bootstrap.sh script further down
-# from its default (circa-2013) dist tarball mirror, ships a bundled config.guess/
-# config.sub that predates the aarch64 GNU triplet, so its ./configure fails immediately on
-# aarch64 -- and the vendor script has no remediation pattern that recognizes that failure,
-# so it just aborts. We can't patch that third-party script, so work around it here
-# instead: pre-build zoltan via spack (whose package.py always reruns autoreconf,
-# regenerating a current, aarch64-aware config.guess/config.sub), matching the same
-# version/MPI/link flags the vendor script would have used itself -- including no Fortran
-# interface: with it, an intel-built libzoltan needs the Intel Fortran runtime, which MOAB's
-# C-only zoltan check cannot link. The vendor script's own
-# TPL-reuse feature (REUSE_TPLS=yes by default) will find this already built at the path it
-# expects and skip building zoltan itself. Done for every arch to keep this recipe simple.
+# MOAB, from spack: TempestRemap, Eigen and Zoltan come along as its dependencies. E3SM's
+# ghci-snl machine expects it at /projects/e3sm/software/moab, so link it there.
 RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
-      spec="zoltan@3.901+mpi~fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
+      spec="moab@5.6.0+mpi+hdf5+netcdf+pnetcdf+zoltan+eigen+tempest+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
       spack install --fail-fast $spec && \
-      mkdir -p /projects/e3sm/software/moab/tpls && \
-      ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab/tpls/zoltan && \
+      mkdir -p /projects/e3sm/software && \
+      ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab && \
       spack gc -y && \
       spack clean -sdfmp; \
     fi
@@ -338,6 +322,7 @@ RUN . /etc/profile && mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       echo "module load $(mods ${LAPACK_SPEC})"; \
       echo "module load $(mods ${MPI_SPEC})"; \
       echo "module load hdf5 netcdf-c netcdf-fortran parallel-netcdf"; \
+      [ "${WITH_MOAB}" = yes ] && echo "module load moab"; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
@@ -367,57 +352,6 @@ RUN . /etc/profile && mkdir -p /projects/e3sm/software /projects/e3sm/data && \
     chmod 0440 /etc/sudoers.d/${USERNAME} && \
     chown ${USERNAME}:${USERNAME} /projects/e3sm /projects/e3sm/software /projects/e3sm/data
 
-# 16. MOAB
-# NOTE: --machine is E3SM's CIME machine name (config_machines.xml), not this image's
-# name; it stays "ghci-snl" until E3SM renames the machine.
-# --compiler is the CIME compiler name on that machine: gnu (also for the CUDA image; MOAB
-# itself is CPU code) or intel.
-# BLAS/LAPACK: the vendor script links openblas's static archive, which then also needs
-# -fopenmp (the cached openblas is OpenMP-threaded), -lgfortran and -lm, and it does not find
-# MKL at all (it probes BLAS_ROOT, which the MKL module does not set); so hand it the link
-# line for both.
-RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
-      case "${COMPILER}" in \
-        gcc) moab_compiler=gnu ;; \
-        intel-oneapi-compilers) moab_compiler=intel ;; \
-      esac && \
-      case "${LAPACK_SPEC}" in \
-        openblas*) lib="-L${BLAS_ROOT}/lib -Wl,-rpath,${BLAS_ROOT}/lib -lopenblas" ;; \
-        intel-oneapi-mkl*) lib="-L${MKLROOT}/lib -L${MKLROOT}/lib/intel64 -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl" ;; \
-        *) lib="" ;; \
-      esac && \
-      blas_args=() && \
-      if [ -n "$lib" ]; then \
-        extra="--with-blas=\"$lib\" --with-lapack=\"$lib\"" && \
-        blas_args=(--extra="$extra" --extra-tempestremap="$extra"); \
-      fi && \
-      env -u LD_LIBRARY_PATH microdnf install -y autoconf automake libtool && \
-      microdnf clean all && \
-      rm -rf /var/cache/dnf && \
-      git clone https://github.com/e3sm-project/e3sm /tmp/e3sm && \
-      cd /tmp/e3sm && git submodule update --init cime && \
-      curl -fsSL "https://bitbucket.org/fathomteam/moab/raw/vijaysm/automated-build-scripts/install/install-bootstrap.sh?cb=$RANDOM" > /tmp/install-bootstrap.sh && \
-      chmod u+x /tmp/install-bootstrap.sh && \
-      LDFLAGS="-L$HDF5_ROOT/lib" /tmp/install-bootstrap.sh        \
-          --profile=e3sm                                          \
-          --no-static                                             \
-          --e3sm-root=/tmp/e3sm                                   \
-          --hdf5-root=$HDF5_ROOT                                  \
-          --netcdf-root=$NETCDF_C_ROOT                            \
-          --pnetcdf-root=$PARALLEL_NETCDF_ROOT                    \
-          --machine=ghci-snl                                      \
-          --compiler "$moab_compiler"                             \
-          --bootstrap-branch=vijaysm/automated-build-scripts      \
-          --bootstrap-refresh --yes                               \
-          "${blas_args[@]}"                                       \
-          --prefix=/projects/e3sm/software/moab || \
-        { log=/tmp/e3sm/moab-build/moab/config.log; \
-          [ -f "$log" ] && grep -nE 'error|undefined|cannot find|not found' "$log" | tail -40; \
-          exit 1; } && \
-      rm -rf /tmp/e3sm /tmp/install-bootstrap.sh && \
-      chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
-    fi
-
 # What this image is, for the smoke tests and for anyone inspecting a container
 RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_MPI=${MPI_SPEC}"; \
@@ -426,7 +360,7 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
       echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env
 
-# 17. Python venv, created and populated as the runtime user: doing this under root and
+# 16. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.
 # The activation hook is guarded so the RUN that creates the venv, which sources profile.d
 # before the venv exists, still works.

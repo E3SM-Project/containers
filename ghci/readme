@@ -180,10 +180,9 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `INTEL_VERSION`    | `2024.1.0`                   | oneAPI release, when `COMPILER=intel-oneapi-compilers` |
 | `MPI_SPEC`         | `openmpi@4.1.4`              | any spack spec, e.g. `openmpi@5.0.10`, `mpich@4.1.1` |
 | `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
-| `BOOST_SPEC`       | `boost@1.83.0`               | built with the env's compiler unless the spec names one (intel uses `%gcc`: b2 cannot install it with the intel toolset); 1.83 is what gcam uses |
 | `WITH_DEBUG_TOOLS` | `yes`                        | gdb and valgrind, from RHEL |
 | `WITH_CUDA`        | `no`                         | |
-| `WITH_MOAB`        | `yes`                        | |
+| `WITH_MOAB`        | `yes`                        | MOAB 5.6.0 (with TempestRemap) from spack, linked at `/projects/e3sm/software/moab`, where E3SM's `ghci-snl` machine looks |
 
 ## How the images are put together
 
@@ -208,7 +207,7 @@ boost, yaml-cpp, and nearly every dependency -- is downloaded in seconds instead
 Whatever the cache does not have (a version, variant or compiler it was not built with) is
 built from source exactly as before; the cache never changes *what* gets installed, only
 how long it takes. In the default gnu-cpu-env, what still builds is openmpi 4 (E4S only has
-openmpi 5) and the MPI-dependent I/O libraries and zoltan (E4S builds those against
+openmpi 5) and the MPI-dependent I/O libraries and MOAB (E4S builds those against
 its own external mpich). gdb and valgrind come from RHEL.
 
 The package recipes are pinned to the same release the cache was built from
