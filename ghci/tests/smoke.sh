@@ -272,6 +272,20 @@ if [ "$E3SM_WITH_MOAB" = yes ]; then
     test -f /projects/e3sm/software/moab/include/moab/iMOAB.h
     nm -D --defined-only /projects/e3sm/software/moab/lib/libMOAB.so | grep iMOAB_Initialize >/dev/null
     test -x /projects/e3sm/software/moab/bin/mbtempest
+    # Link against MOAB the way E3SM's build does: with the exact MOAB_PACKAGE_LIBS its
+    # MOABConfig.cmake exports. Every -lfoo in there has to resolve, -L or not.
+    moab=/projects/e3sm/software/moab
+    config=$(find "$moab"/lib* -name MOABConfig.cmake | sed -n 1p)
+    test -n "$config"
+    moab_libs=$(sed -n 's/^set *(MOAB_PACKAGE_LIBS "\(.*\)")$/\1/p' "$config")
+    test -n "$moab_libs"
+    cat > moab.cpp <<'CPP'
+#include "moab/iMOAB.h"
+int main() { return reinterpret_cast<void *>(&iMOAB_Initialize) ? 0 : 1; }
+CPP
+    # shellcheck disable=SC2086  # MOAB_PACKAGE_LIBS is a flag list
+    mpicxx moab.cpp -o moab-link -I"$moab/include" -L"$moab/lib" -Wl,-rpath -Wl,"$moab/lib" -lMOAB $moab_libs
+    ./moab-link
 fi
 
 if [ "${EXPECT_CUDA:-}" = yes ]; then
