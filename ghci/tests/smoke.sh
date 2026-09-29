@@ -268,7 +268,9 @@ if [ "$E3SM_WITH_MOAB" = yes ]; then
     step "MOAB"
     # Where E3SM's ghci-snl machine expects it (MOAB_ROOT)
     ls /projects/e3sm/software/moab/lib/libMOAB.so* >/dev/null
-    ls /projects/e3sm/software/moab/lib/libiMOAB.so* >/dev/null
+    # iMOAB (the interface E3SM calls) is built into libMOAB, not a library of its own
+    test -f /projects/e3sm/software/moab/include/moab/iMOAB.h
+    nm -D --defined-only /projects/e3sm/software/moab/lib/libMOAB.so | grep iMOAB_Initialize >/dev/null
     test -x /projects/e3sm/software/moab/bin/mbtempest
 fi
 
