@@ -167,9 +167,8 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
-              # b2 builds every boost library with the intel toolset but then fails
-              # installing BoostConfigVersion.cmake (1.83, 1.86 and 1.90 alike, under
-              # spack 1.x); icpx uses gcc's libstdc++, so a gcc-built boost is compatible.
+              # gcc-built boost (icpx uses gcc's libstdc++, so it is compatible): b2's
+              # install race (see the Dockerfile) hit every intel-toolset attempt so far.
               BOOST_SPEC=boost@1.83.0 %gcc
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
