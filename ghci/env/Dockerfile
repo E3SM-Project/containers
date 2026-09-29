@@ -294,11 +294,13 @@ RUN . /etc/profile && on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
 # so it just aborts. We can't patch that third-party script, so work around it here
 # instead: pre-build zoltan via spack (whose package.py always reruns autoreconf,
 # regenerating a current, aarch64-aware config.guess/config.sub), matching the same
-# version/MPI/link flags the vendor script would have used itself. The vendor script's own
+# version/MPI/link flags the vendor script would have used itself -- including no Fortran
+# interface: with it, an intel-built libzoltan needs the Intel Fortran runtime, which MOAB's
+# C-only zoltan check cannot link. The vendor script's own
 # TPL-reuse feature (REUSE_TPLS=yes by default) will find this already built at the path it
 # expects and skip building zoltan itself. Done for every arch to keep this recipe simple.
 RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
-      spec="zoltan@3.901+mpi+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
+      spec="zoltan@3.901+mpi~fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
       spack install --fail-fast $spec && \
       mkdir -p /projects/e3sm/software/moab/tpls && \
       ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab/tpls/zoltan && \
@@ -403,7 +405,10 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
           --bootstrap-branch=vijaysm/automated-build-scripts      \
           --bootstrap-refresh --yes                               \
           "${blas_args[@]}"                                       \
-          --prefix=/projects/e3sm/software/moab && \
+          --prefix=/projects/e3sm/software/moab || \
+        { log=/tmp/e3sm/moab-build/moab/config.log; \
+          [ -f "$log" ] && grep -nE 'error|undefined|cannot find|not found' "$log" | tail -40; \
+          exit 1; } && \
       rm -rf /tmp/e3sm /tmp/install-bootstrap.sh && \
       chown -R "${E3SM_USER}:${E3SM_USER}" /projects/e3sm/software/moab; \
     fi
