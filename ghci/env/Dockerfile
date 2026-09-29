@@ -288,8 +288,9 @@ RUN . /etc/profile && on="%${COMPILER_SPEC} ^${MPI_SPEC}" && \
 
 # MOAB, from spack: TempestRemap, Eigen and Zoltan come along as its dependencies. E3SM's
 # ghci-snl machine expects it at /projects/e3sm/software/moab, so link it there.
+# Eigen stays on 3.4: MOAB 5.6.0 builds as C++11, and Eigen 5 needs C++14.
 RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
-      spec="moab@5.6.0+mpi+hdf5+netcdf+pnetcdf+zoltan+eigen+tempest+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC}" && \
+      spec="moab@5.6.0+mpi+hdf5+netcdf+pnetcdf+zoltan+eigen+tempest+fortran+shared %${COMPILER_SPEC} ^${MPI_SPEC} ^eigen@3.4" && \
       spack install --fail-fast $spec && \
       mkdir -p /projects/e3sm/software && \
       ln -s "$(spack location -i $spec)" /projects/e3sm/software/moab && \
