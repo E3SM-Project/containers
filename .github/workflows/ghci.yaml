@@ -167,9 +167,6 @@ jobs:
               GCC_TOOLSET=13
               MPI_SPEC=openmpi@4.1.4
               LAPACK_SPEC=intel-oneapi-mkl@2024.1.0
-              # gcc-built boost (icpx uses gcc's libstdc++, so it is compatible): b2's
-              # install race (see the Dockerfile) hit every intel-toolset attempt so far.
-              BOOST_SPEC=boost@1.83.0 %gcc
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes

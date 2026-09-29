@@ -180,7 +180,7 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `INTEL_VERSION`    | `2024.1.0`                   | oneAPI release, when `COMPILER=intel-oneapi-compilers` |
 | `MPI_SPEC`         | `openmpi@4.1.4`              | any spack spec, e.g. `openmpi@5.0.10`, `mpich@4.1.1` |
 | `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
-| `BOOST_SPEC`       | `boost@1.83.0`               | built with the env's compiler unless the spec names one (intel uses `%gcc`: b2 fails to install with the intel toolset); 1.83 is what gcam uses |
+| `BOOST_SPEC`       | `boost@1.83.0`               | built with the env's compiler unless the spec names one; 1.83 is what gcam uses |
 | `WITH_DEBUG_TOOLS` | `yes`                        | gdb and valgrind, from RHEL |
 | `WITH_CUDA`        | `no`                         | |
 | `WITH_MOAB`        | `yes`                        | |
