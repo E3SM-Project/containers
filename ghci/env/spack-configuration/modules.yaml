@@ -8,11 +8,16 @@ modules:
       - lmod
     roots:
       lmod: /modulefiles
+    # LIBRARY_PATH as well as LD_LIBRARY_PATH: the compiler searches LIBRARY_PATH at link
+    # time, so a bare -lfoo that a package records in its flags without the matching -L (e.g.
+    # the -lz in MOAB's MOAB_PACKAGE_LIBS, from hdf5's zlib) still finds spack's library.
     prefix_inspections:
       lib:
         - LD_LIBRARY_PATH
+        - LIBRARY_PATH
       lib64:
         - LD_LIBRARY_PATH
+        - LIBRARY_PATH
     lmod:
       hash_length: 0
       hierarchy:
