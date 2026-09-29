@@ -278,6 +278,15 @@ RUN . /etc/profile && spack install --fail-fast ${MPI_SPEC} %${COMPILER_SPEC} &&
     spack gc -y && \
     spack clean -sdfmp
 
+# Under heavy load (e.g., a full parallel ctest run), Open MPI's mpirun can see a rank exit
+# before it has recorded that rank's MPI_Finalize, and then fails a run that actually
+# succeeded with "exited improperly... did not call finalize". This is a timing race inside
+# Open MPI, not a bug in the test. These vars tell mpirun to accept a rank that exits with
+# code 0 without that handshake; a crash or non-zero exit still fails the test.
+# ORTE (OMPI 4.x) reads the first var, PRRTE (OMPI 5.x) the second; MPICH ignores both.
+ENV OMPI_MCA_orte_allowed_exit_without_sync=1 \
+    PRTE_MCA_prte_allowed_exit_without_sync=1
+
 # 13. I/O libraries. Each root pinned to MPI_SPEC: the provider preference lists mpich first
 # and the cache has other MPIs, so without it spack is free to pick a different MPI for them.
 # NOTE: %compiler must precede ^mpi, or spack applies it to the MPI instead of the root.
