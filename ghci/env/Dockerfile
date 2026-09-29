@@ -218,6 +218,16 @@ RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
     spack gc -y && \
     spack clean -sdfmp
 
+# E3SM's ghci-snl machine sets BLA_VENDOR=Generic, so CMake's FindBLAS/FindLAPACK only look
+# for libraries named blas and lapack. openblas provides both but only as libopenblas, so give
+# it those names too (the usual distro practice); netlib-lapack and MKL need nothing.
+RUN . /etc/profile && case "${LAPACK_SPEC}" in openblas*) \
+      lib="$(spack location -i openblas)/lib" && \
+      for name in blas lapack; do \
+        ln -sf libopenblas.so "$lib/lib$name.so" && ln -sf libopenblas.so "$lib/lib$name.so.3"; \
+      done ;; \
+    esac
+
 ARG MPI_SPEC=openmpi@4.1.4
 ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no

@@ -228,7 +228,7 @@ esac
 mpifort la.f90 -o la "${lapack[@]}"
 ./la
 
-step "CMake finds MPI, yaml-cpp and Boost like E3SM's build"
+step "CMake finds MPI, yaml-cpp, Boost and (Generic) BLAS/LAPACK like E3SM's build"
 mkdir cmake-test
 cat > cmake-test/CMakeLists.txt <<'CMAKE'
 cmake_minimum_required(VERSION 3.18)
@@ -236,6 +236,10 @@ project(smoke LANGUAGES C CXX Fortran)
 find_package(MPI REQUIRED COMPONENTS C CXX Fortran)
 find_package(yaml-cpp REQUIRED)
 find_package(Boost REQUIRED)
+# What E3SM's build does on ghci-snl, which sets BLA_VENDOR=Generic
+set(BLA_VENDOR Generic)
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
 add_executable(smoke main.cpp)
 target_link_libraries(smoke PRIVATE MPI::MPI_CXX yaml-cpp::yaml-cpp Boost::headers)
 CMAKE
