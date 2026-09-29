@@ -209,9 +209,10 @@ RUN . /etc/profile && if [ "${COMPILER}" = "intel-oneapi-compilers" ]; then \
 
 # 10. Packages that depend only on the compiler, not on MPI or CUDA
 # boost is pinned to 1.83, what gcam uses; E3SM needs nothing newer (ekat only uses it for
-# backtraces). Its install is retried: b2's parallel `install` sometimes writes
-# BoostConfigVersion.cmake before creating bin.v2/tools/boost_install, and fails after building
-# every library (seen with both the gcc and intel toolsets). A retry only redoes what failed. A BOOST_SPEC that names its own compiler is used as is, otherwise boost is
+# backtraces). b2's `install` writes BoostConfigVersion.cmake into bin.v2/tools/boost_install
+# without creating it first -- always with the intel toolset, sometimes with gcc -- so boost
+# comes from a small override in spack-configuration/repos/spack_repo/e3sm that creates it.
+# The install is still retried once or twice, which only redoes what failed. A BOOST_SPEC that names its own compiler is used as is, otherwise boost is
 # built with the env's compiler like the other E3SM-facing libraries.
 ARG LAPACK_SPEC=openblas
 ARG BOOST_SPEC=boost@1.83.0
