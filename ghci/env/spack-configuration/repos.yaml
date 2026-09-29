@@ -1,8 +1,16 @@
 # Pin the package recipes to the release the E4S cache below was built from, so the
 # concretizer sees the same versions and variants the cached binaries have.
-# The e3sm repo comes first, so its few recipe fixes (see repos/spack_repo/e3sm) win.
+#
+# E3SM's own package repo comes first, so its recipes shadow builtin's: the E3SM delta on
+# moab (Eigen 3), tempestremap (the grid-element tolerance patch for high-resolution meshes,
+# and its missing C dependency), and newer netcdf-c/netcdf-fortran/pnetcdf with MPI configure
+# fixes. It is what mache uses, and its CI tests it against this exact spack/builtin pair.
 repos:
-  e3sm: /spack-configuration/repos/spack_repo/e3sm
+  e3sm:
+    git: https://github.com/E3SM-Project/e3sm-spack-packages.git
+    commit: 6306d767b2a1e02d804704e67cd2b9206d041712
+    destination: /spack-e3sm-packages
+    paths: [repos/spack_repo/e3sm]
   builtin:
     git: https://github.com/spack/spack-packages.git
     tag: v2026.06.0
