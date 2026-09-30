@@ -68,17 +68,21 @@ RUN set -euo pipefail && \
 
 # GitHub CLI. The el9 repo up from GitHub's own el9 repo (x86_64 and aarch64)
 # upgraded gh to a versin that requires OpenPGP v6, which is NOT supported on rhel9.
-# Hence, just fetch pre-compiled binaries instead.
-RUN ARCH=$(uname -m) && \
+# Hence, just fetch pre-compiled binaries instead, checked against the release's checksums.
+ARG GH_VERSION=2.101.0
+RUN set -euo pipefail && \
+    ARCH=$(uname -m) && \
     case "${ARCH}" in \
       x86_64)  GH_ARCH="amd64" ;; \
       aarch64) GH_ARCH="arm64" ;; \
       *)       echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac && \
-    GH_VERSION="2.101.0" && \
-    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" -o gh.tar.gz && \
-    tar -xzf gh.tar.gz --strip-components=1 -C /usr/local && \
-    rm gh.tar.gz
+    release="https://github.com/cli/cli/releases/download/v${GH_VERSION}" && \
+    tarball="gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" && \
+    curl -fsSLO "${release}/${tarball}" && \
+    curl -fsSL "${release}/gh_${GH_VERSION}_checksums.txt" | grep " ${tarball}$" | sha256sum -c - && \
+    tar -xzf "${tarball}" --strip-components=1 -C /usr/local && \
+    rm -f "${tarball}"
 
 # Shell ergonomics. Loaded last so it wins over the env setup from the stages below.
 RUN printf '%s\n' \
