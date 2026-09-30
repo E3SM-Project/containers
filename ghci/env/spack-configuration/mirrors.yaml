@@ -1,7 +1,9 @@
 # Prebuilt binaries from E4S (https://oaciss.uoregon.edu/e4s/inventory.html). Anything the
 # concretizer can reuse from here is installed in seconds instead of built; anything it
-# cannot (a version, variant or compiler the cache does not have) is built from source as
-# before, so this only ever changes build time, never what gets built.
+# cannot (a version, variant or compiler the cache does not have) is built from source.
+# NOTE: with `reuse: true` (concretizer.yaml) this can change what gets built, not only how
+# fast: for anything the specs leave open (versions of unconstrained roots such as boost,
+# and of dependencies), the solver prefers what the cache already has over the newest.
 #
 # E4S's rocky9 stack is the one that matches: rocky9 has glibc 2.34, same as UBI9 (the os
 # names are bridged in concretizer.yaml), and it is built with gcc-toolset-13 (gcc 13.3.1),

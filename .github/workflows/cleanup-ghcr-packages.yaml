@@ -5,7 +5,6 @@ on:
     types: [closed]
     paths:
       - 'ghci/**'
-      - 'ghci-snl/**'
       - '.github/workflows/*.yaml'
   schedule:
     # Daily at 2:00 AM UTC
@@ -24,7 +23,6 @@ env:
   # Every package this repo publishes. Keep in sync with the workflows.
   PACKAGES: >-
     e3sm-ghci
-    e3sm-ghci-snl
 
 jobs:
   delete-pr-images:
