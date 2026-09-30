@@ -20,7 +20,7 @@ Public images can be pulled anonymously. If you need authenticated access to GHC
 ## Quick start
 
 ```bash
-podman run --rm -it \
+podman run --rm -it --userns=keep-id:uid=1000,gid=1000 \
   -v /path/to/host/inputdata:/projects/e3sm/data/inputdata:z \
   -v /path/to/host/baselines:/projects/e3sm/data/baselines:z \
   ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
@@ -28,14 +28,16 @@ podman run --rm -it \
 
 The default command is already `bash --login`. A plain `/bin/bash` gives you a non-login
 shell, which skips `/etc/profile.d` and leaves you without the modules, `SPACK_ARCH`, or
-the python venv.
+the python venv. `--userns=keep-id:uid=1000,gid=1000` makes the mounts writable under
+rootless podman; drop it with docker (see [The default user](#the-default-user)).
 
 ## Available images
 
 Every image is published under a single, arch-independent tag. Each tag is a multi-arch
 manifest list holding a natively-built image (no emulation) for each arch listed below, so
 `podman pull` resolves to whatever arch you are on and nothing here needs an arch in its
-name. The Intel images are `x86_64` only:
+name. The Intel images are `x86_64` only, and every `x86_64` image needs an **x86-64-v3**
+CPU (AVX2: Intel Haswell / AMD Excavator or newer), the target the binary cache is built for:
 
 | Tag                 | Arches          | Compiler | Notes                                                       |
 |---------------------|-----------------|----------|-------------------------------------------------------------|
@@ -117,12 +119,18 @@ mounted in -- log in once inside and the `~/.claude` volume keeps it across rebu
 
 The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
 
-- MPI implementations refuse to run as root, so this removes the usual `--userns=keep-id`
-  dance and the `mpirun` workarounds.
-- Files written into bind mounts come back owned by uid 1000, which is the first user on
-  most Linux hosts, so ownership usually lines up with no extra flags.
-- If your host uid differs, `podman run --userns=keep-id` still works, and
-  `--user root` gets you a root shell if you need one.
+- MPI implementations refuse to run as root, so this removes the usual `mpirun`
+  workarounds.
+- With docker (and rootful podman), files written into bind mounts come back owned by
+  uid 1000, which is the first user on most Linux hosts, so ownership usually lines up
+  with no extra flags.
+- **Rootless podman is different**: by default your host user maps to container *root*,
+  and container uid 1000 maps to a subordinate uid, so `e3sm` cannot write to your
+  bind-mounted checkout. Map your host user onto `e3sm` explicitly (podman 4.3+):
+  `podman run --userns=keep-id:uid=1000,gid=1000 ...`. Plain `--userns=keep-id` runs
+  as your host uid instead, which cannot write to the image's own `/projects/e3sm`
+  paths unless that uid happens to be 1000.
+- `--user root` gets you a root shell if you need one.
 - At the labs your uid is usually not 1000, and shared inputdata/baselines are reachable
   through a group instead. Hand that group to the container: with docker,
   `--group-add $(stat -c %g /path/to/baselines)`; with rootless podman, whose user
