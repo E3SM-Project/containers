@@ -60,11 +60,14 @@
     "source=e3sm-config,target=/home/e3sm/.config,type=volume",
     "source=e3sm-claude,target=/home/e3sm/.claude,type=volume",
     "source=e3sm-codex,target=/home/e3sm/.codex,type=volume",
-    "source=e3sm-copilot,target=/home/e3sm/.copilot,type=volume"
+    "source=e3sm-copilot,target=/home/e3sm/.copilot,type=volume",
+    // Only opencode's own dir: a volume over all of ~/.local/share would hide the Claude
+    // Code install that lives there.
+    "source=e3sm-opencode,target=/home/e3sm/.local/share/opencode,type=volume"
 
     // To instead bind your host credentials (gh/codex/copilot/opencode work on first
     // launch, but every process in the container -- agents included -- can read them),
-    // replace the four volumes above with:
+    // replace the five volumes above with:
     //   "source=${localEnv:HOME}/.config/gh,target=/home/e3sm/.config/gh,type=bind",
     //   "source=${localEnv:HOME}/.codex,target=/home/e3sm/.codex,type=bind",
     //   "source=${localEnv:HOME}/.copilot,target=/home/e3sm/.copilot,type=bind",

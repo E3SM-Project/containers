@@ -111,7 +111,8 @@ RUN mkdir -p /home/${E3SM_USER}/.cache/ccache \
              /home/${E3SM_USER}/.config \
              /home/${E3SM_USER}/.claude \
              /home/${E3SM_USER}/.codex \
-             /home/${E3SM_USER}/.copilot && \
+             /home/${E3SM_USER}/.copilot \
+             /home/${E3SM_USER}/.local/share/opencode && \
     chown -R ${E3SM_USER}:${E3SM_USER} /home/${E3SM_USER}
 
 # A bind-mounted repo is owned by the host's uid, which need not be ours; without this git
