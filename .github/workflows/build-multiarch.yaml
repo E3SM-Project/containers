@@ -94,6 +94,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # OCI labels (source, revision, created, licenses, ...) for this image's config. Without
+      # them it carries the UBI base image's, and GHCR shows no source or description. Only
+      # the config changes per commit; the cached layers are unaffected.
+      - name: Labels
+        id: labels
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.title=${{ inputs.tag }}
+            org.opencontainers.image.description=${{ inputs.description }}
+
       - name: Build
         id: build
         uses: docker/build-push-action@v6
@@ -101,6 +113,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.context }}/Dockerfile
           build-args: ${{ inputs.build_args }}
+          labels: ${{ steps.labels.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=${{ env.PUSH }},name-canonical=true,push=${{ env.PUSH }}
           # Registry cache (one tag per compiler/env x arch, same as the images themselves) rather than
           # actions/cache: the latter is scoped per-branch and shares a repo-wide 10GB/7-day eviction
@@ -173,9 +186,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The index needs its own annotations: for a multi-arch image GHCR takes the package
+      # description from the index, not from the per-arch configs' labels.
       - name: Meta
         id: meta
         uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -193,6 +210,7 @@ jobs:
             # the two workflows disagree on what tag the merge job just published.
             type=raw,value=${{ inputs.tag }}-mg-${{ github.sha }},enable=${{ github.event_name == 'merge_group' }}
           labels: |
+            org.opencontainers.image.title=${{ inputs.tag }}
             org.opencontainers.image.description=${{ inputs.description }}
 
       - name: Create manifest list and push
@@ -202,6 +220,9 @@ jobs:
           while IFS= read -r tag; do
             args+=(-t "$tag")
           done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          while IFS= read -r annotation; do
+            args+=(--annotation "$annotation")
+          done < <(jq -r '.annotations[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           for f in *; do
             args+=("$IMAGE@$(cat "$f")")
           done
