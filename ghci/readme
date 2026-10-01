@@ -1,7 +1,8 @@
 # E3SM ghci containers
 
 Development and testing environments for E3SM: a spack-built software stack on UBI9,
-runnable anywhere with podman or docker. Software only -- no input data is baked in; mount
+runnable anywhere with podman, docker or Apptainer (see
+[Apptainer / HPC](#apptainer--singularity-on-hpc-systems)). Software only -- no input data is baked in; mount
 what you need.
 
 ## GitHub container registry (GHCR) authentication
@@ -138,6 +139,95 @@ The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
 
 Builds run as root; the env and `-dev` images switch to `e3sm` at the end.
 
+## Apptainer / Singularity on HPC systems
+
+HPC systems rarely have docker or podman; they have Apptainer (formerly Singularity). The
+images work there, but several things behave differently from `docker run`. Everything
+marked *tested* is run by `ghci/tests/apptainer.sh`, which CI runs against the published
+`gnu-cpu-env` image on x86_64 with Apptainer 1.4 (user-namespace mode); the rest is
+documented from the image's contents and has not been run on real HPC hardware.
+
+```bash
+# the SIF is a single read-only file, so build it once, somewhere with room
+export APPTAINER_CACHEDIR=$SCRATCH/apptainer-cache APPTAINER_TMPDIR=$SCRATCH/tmp
+apptainer pull e3sm-ghci-gnu-cpu-env.sif docker://ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+
+apptainer run --cleanenv \
+  --bind /path/to/inputdata:/projects/e3sm/data/inputdata \
+  e3sm-ghci-gnu-cpu-env.sif
+```
+
+For a private GHCR package, set `APPTAINER_DOCKER_USERNAME` and `APPTAINER_DOCKER_PASSWORD`
+(a PAT with `read:packages`) before pulling. Tags are multi-arch, so the pull gets the
+native image.
+
+What differs from docker/podman:
+
+- **You are not `e3sm`.** Apptainer runs as your own host user and uid, with your own
+  `$HOME`. The `e3sm` user, its uid 1000 and its home are not used, and `sudo` does not
+  work (nor is it needed: MPI is happy as a non-root user, and files written to bind mounts
+  are owned by you). *Tested.* `E3SM_USER` is still set to `e3sm`; ignore it.
+- **Get a login shell.** The environment (modules, `SPACK_ARCH`, the compiler, the venv)
+  lives in `/etc/profile.d`, which only a login shell reads, and `apptainer exec` does not
+  start one. *Tested:*
+  - `apptainer run img.sif` runs the image's default command, `bash --login`;
+  - `apptainer exec img.sif bash -l -c '<command>'`;
+  - `apptainer exec img.sif e3sm-env <command>`.
+
+  A plain `apptainer exec img.sif cmake --version` finds none of the modules.
+- **Use `--cleanenv` (`-e`).** By default your host environment is passed into the
+  container, so host `PATH`, `LD_LIBRARY_PATH`, `PYTHONPATH`, certificate-bundle variables
+  and the like can shadow or break what the image provides. `--cleanenv` keeps the image's
+  own `ENV` and drops the rest; pass what you need on purpose with `--env NAME=value` (for
+  example `http_proxy` for `pip` on a node behind a proxy). *Tested.*
+- **The image is read-only.** The venv (`/projects/e3sm/software/eamxx-venv`) and
+  `/projects/e3sm` cannot be written to, so `pip install` fails. Three ways round it, all
+  *tested*:
+  - `--writable-tmpfs`: writes go to memory and vanish when the container exits; right
+    for trying a package or for a quick test;
+  - `--overlay`: `apptainer overlay create --size 1024 overlay.img`, then
+    `--overlay overlay.img`; writes persist in that file, which is one file on a
+    parallel filesystem rather than many small ones;
+  - install elsewhere and point at it, e.g. `pip install --target $SCRATCH/pylibs ...`
+    and `PYTHONPATH=$SCRATCH/pylibs`. (`pip install --user` does not work in a venv.)
+- **Mounts.** Your `$HOME`, `/tmp` and the current directory are mounted automatically.
+  Bind everything else with `--bind host:container`, as in the quick start above;
+  `/projects/e3sm/data/inputdata` does not need to exist in the image. *Tested.* The
+  SELinux `:z` suffix is a podman/docker option; do not use it. Access to
+  group-shared data depends on how the site configures Apptainer (setuid or user
+  namespaces); check that you can read it from inside before relying on it.
+
+### MPI
+
+- **One node: works.** `mpirun -n N` inside the container, as the smoke test does with two
+  ranks and C, `mpi` and `mpi_f08` programs. *Tested.* Run it under your scheduler's
+  allocation, e.g. `srun -N1 -n1 apptainer exec ... mpirun -n 16 ./a.out`; `mpirun` inside
+  the container does not know about Slurm and uses every core it can see unless told
+  otherwise.
+- **Several nodes: not qualified, and not tuned.** The default image's Open MPI 4.1.4 is
+  built from spack with only the `self`, `vader` (shared-memory) and `tcp` transports: no
+  `ucx`, `libfabric`/OFI, verbs or PSM, and no Slurm launcher. So inside the container,
+  traffic between nodes can only go over TCP, and `mpirun` cannot start ranks on other
+  nodes through Slurm. The usual options are:
+  - *Hybrid*: launch with the host's `srun`/`mpirun` (`srun ... apptainer exec img.sif
+    ./a.out`) so the host MPI starts the container processes. This needs a host MPI whose
+    PMI/PMIx and ABI match the container's, and is something a site has to arrange.
+  - *Bind-mount the site MPI and its fabric libraries* into the container and build E3SM
+    against them rather than the image's MPI.
+
+  Which fits depends on the site's MPI and interconnect (Slingshot, InfiniBand, ...).
+  Treat the image as a development and testing environment on such systems, not as a
+  production MPI runtime, unless you have set one of these up and validated it.
+
+### GPUs
+
+The CUDA images carry the CUDA toolkit and CUDA-enabled Torch/CuPy but, as with docker,
+no driver. Apptainer's `--nv` injects the host's NVIDIA driver libraries into the
+container. That is the expected way to run on a GPU node but has **not** been qualified:
+CI has no GPU, and tests only that the CUDA images import and that `nvcc` compiles a
+kernel. The host driver must be new enough for the image's CUDA (12.4 on x86_64, 13.0 on
+aarch64).
+
 ## Important storage & permission guidelines
 
 - **Input data** (`inputdata`): mount it at `/projects/e3sm/data/inputdata`. The `e3sm`
@@ -240,7 +330,7 @@ anywhere.
 ## Size reports and runtime checks
 
 For same-repository PRs, CI tests every published env/platform combination as the non-root
-user: login environment, writable venv, Python dependency consistency, NetCDF round-trip,
+user (and `gnu-cpu-env` on x86_64 again under Apptainer, see above): login environment, writable venv, Python dependency consistency, NetCDF round-trip,
 Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
 an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
 
