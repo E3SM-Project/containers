@@ -116,7 +116,9 @@ jobs:
       - name: Check Dockerfile shell syntax
         run: python3 scripts/check-dockerfiles.py
       - name: Check smoke script syntax
-        run: bash -n ghci/tests/smoke.sh
+        run: |
+          bash -n ghci/tests/smoke.sh
+          bash -n ghci/tests/apptainer.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
       - name: Check all GitHub Actions workflows
@@ -262,6 +264,35 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  # The images are run with Apptainer on HPC systems, where the user, the login shell, a
+  # read-only filesystem and the host environment all differ from docker. Pull the published
+  # image the way an HPC user would (docker://) and run the same smoke checks under it.
+  apptainer:
+    needs: [suffix, env]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    name: apptainer (gnu-cpu-env, x86_64)
+    env:
+      APPTAINER_VERSION: 1.4.5
+      APPTAINER_DEB_SHA256: 70f19af846501acfbc2e42e7cfeee9ee11ddbbfa1c3502d0d99cde34e8e0af05
+      APPTAINER_DOCKER_USERNAME: ${{ github.actor }}
+      APPTAINER_DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:gnu-cpu-env${{ needs.suffix.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Apptainer
+        run: |
+          deb="apptainer_${APPTAINER_VERSION}_amd64.deb"
+          curl -fsSLO "https://github.com/apptainer/apptainer/releases/download/v${APPTAINER_VERSION}/${deb}"
+          echo "${APPTAINER_DEB_SHA256}  ${deb}" | sha256sum --check
+          sudo apt-get install -y "./${deb}"
+          apptainer --version
+      - name: Test under Apptainer
+        run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
+
   # The one job to mark as a required status check / merge-queue check. It always runs
   # (`if: always()`) and only fails if a needed job actually failed or was cancelled -- a
   # job the `changes` filter caused to be skipped is not a failure. This is what makes a
@@ -269,7 +300,7 @@ jobs:
   # posts a conclusion, so the required check is never left permanently "Expected".
   required-check:
     name: required-check
-    needs: [changes, suffix, lint, env, dev, smoke]
+    needs: [changes, suffix, lint, env, dev, smoke, apptainer]
     if: always()
     runs-on: ubuntu-latest
     steps:

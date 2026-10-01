@@ -23,6 +23,9 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 - **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
   `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
   owned by root.
+- **Runs under Apptainer too.** HPC users pull the same images with
+  `apptainer pull docker://...`; the differences (host user, read-only image, login shell,
+  MPI across nodes, GPUs) and what CI checks are in [`ghci/readme`](ghci/readme).
 - **Prebuilt where possible.** Spack stacks reuse binaries from the E4S build cache and
   build only what it does not have; see [`ghci/readme`](ghci/readme).
 - **Path-scoped builds.** The ghci workflow always reports its required check, but filters

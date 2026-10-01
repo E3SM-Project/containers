@@ -3,6 +3,9 @@
 # docker run --rm -e EXPECT_CUDA=no -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
 #   IMAGE bash -l /opt/ghci-tests/smoke.sh
 #
+# Under Apptainer/Singularity the image is read-only, the user is the host user and sudo
+# does not work, so pass SMOKE_READONLY=yes; see ghci/tests/apptainer.sh.
+#
 # Checks what E3SM itself needs from the image, not just that the tools exist: the login
 # environment and module *_ROOT variables, the MPI wrappers' compiler, Fortran module files
 # (.mod) that match that compiler, parallel I/O through netCDF-4/HDF5 and PnetCDF, LAPACK,
@@ -27,7 +30,9 @@ test "$(id -u)" -ne 0
 test -n "$SPACK_ARCH"
 test -n "$COMPILER_SPEC"
 test "$VIRTUAL_ENV" = /projects/e3sm/software/eamxx-venv
-test -w "$VIRTUAL_ENV/lib"
+if [ "${SMOKE_READONLY:-no}" != yes ]; then
+    test -w "$VIRTUAL_ENV/lib"
+fi
 # A fresh login shell must come up clean: a module that fails to load only prints a warning.
 login_errors=$(bash -lc true 2>&1 | grep -iE 'error|unable to locate|not found' || true)
 if [ -n "$login_errors" ]; then
@@ -35,7 +40,9 @@ if [ -n "$login_errors" ]; then
     echo "$login_errors" >&2
     exit 1
 fi
-sudo -n true
+if [ "${SMOKE_READONLY:-no}" != yes ]; then
+    sudo -n true
+fi
 
 step "module paths"
 roots=(HDF5_ROOT NETCDF_C_ROOT NETCDF_FORTRAN_ROOT PARALLEL_NETCDF_ROOT MPI_ROOT YAML_CPP_ROOT BOOST_ROOT)
@@ -74,7 +81,8 @@ from mpi4py import MPI
 import torch
 import xarray
 
-with tempfile.TemporaryDirectory(dir=os.environ["VIRTUAL_ENV"]) as directory:
+scratch = None if os.environ.get("SMOKE_READONLY") == "yes" else os.environ["VIRTUAL_ENV"]
+with tempfile.TemporaryDirectory(dir=scratch) as directory:
     path = Path(directory) / "test.nc"
     with netCDF4.Dataset(path, "w") as dataset:
         dataset.createDimension("x", 3)
