@@ -119,6 +119,7 @@ jobs:
         run: |
           bash -n ghci/tests/smoke.sh
           bash -n ghci/tests/apptainer.sh
+          bash -n ghci/tests/dev-container.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
       - name: Check all GitHub Actions workflows

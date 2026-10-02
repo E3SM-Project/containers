@@ -120,8 +120,11 @@ integrated terminal a `bash -l` profile, and wrap lifecycle hooks -- which run u
 `sh -c` -- in `e3sm-env`:
 
 ```jsonc
-"postCreateCommand": "e3sm-env git submodule update --init --recursive"
+"postCreateCommand": "e3sm-fix-ownership && e3sm-env git submodule update --init --recursive"
 ```
+
+(`e3sm-fix-ownership` is for Linux hosts whose uid is not 1000; see
+[The default user](#the-default-user).)
 
 `e3sm-env <cmd>` runs a command with the full login environment from a context that has
 none. It is also the images' entrypoint, but Dev Containers starts the container with its
@@ -155,6 +158,16 @@ The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
   as your host uid instead, which cannot write to the image's own `/projects/e3sm`
   paths unless that uid happens to be 1000.
 - `--user root` gets you a root shell if you need one.
+- **Dev Containers on Linux** (`"updateRemoteUserUID": true`, as in the example) changes
+  `e3sm`'s uid/gid to yours when your host uid is not 1000, but only re-owns the home
+  directory. The python venv and `/projects/e3sm` stay owned by uid 1000, so `pip install`
+  and creating anything next to the checkout fail. The `-dev` images carry
+  `e3sm-fix-ownership`, which hands those to the current user; the example runs it from
+  `postCreateCommand`, and so should your own `devcontainer.json`. With uid 1000 (and on
+  macOS and Windows, where nothing is remapped) it returns at once; after a remap it copies
+  the venv into the container's writable layer once (1-6 GB depending on the image), which
+  can take a minute. It leaves what is inside `/projects/e3sm/data` and
+  `/projects/e3sm/work` alone: those are your bind mounts.
 - At the labs your uid is usually not 1000, and shared inputdata/baselines are reachable
   through a group instead. Hand that group to the container: with docker,
   `--group-add $(stat -c %g /path/to/baselines)`; with rootless podman, whose user
@@ -360,6 +373,10 @@ user (and `gnu-cpu-env` on x86_64 again under Apptainer, see above): login envir
 commands run without a login shell (through `e3sm-env`), writable venv, Python dependency consistency, NetCDF round-trip,
 Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
 an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
+
+`ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (a
+Dev Containers uid remap). CI does not smoke-test the `-dev` images yet, so it is not run
+there; run it by hand as its header shows.
 
 The ARM CUDA image currently has one verified upstream packaging defect:
 `nvidia-cusparselt-cu13==0.8.1` has an `aarch64` wheel filename but an internal

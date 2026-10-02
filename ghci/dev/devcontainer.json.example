@@ -7,7 +7,9 @@
   "image": "ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env-dev",
 
   // The image's non-root user. On Linux the Dev Containers extension rewrites its uid/gid
-  // to match yours so bind-mounted files are not owned by the wrong user.
+  // to match yours so bind-mounted files are not owned by the wrong user. It only re-owns
+  // the home directory, though; e3sm-fix-ownership in postCreateCommand below does the venv
+  // and /projects/e3sm.
   "remoteUser": "e3sm",
   "updateRemoteUserUID": true,
 
@@ -89,7 +91,10 @@
 
   // Lifecycle hooks run under `sh -c`, which is NOT a login shell, so wrap anything that
   // needs the toolchain. `e3sm-env` in these images does exactly that.
-  "postCreateCommand": "e3sm-env git submodule update --init --recursive",
+  // e3sm-fix-ownership comes first: if the uid was rewritten (Linux, host uid not 1000) it
+  // hands the python venv and /projects/e3sm to you, so `pip install` works -- a one-time
+  // copy of the venv that can take a minute. Otherwise it does nothing.
+  "postCreateCommand": "e3sm-fix-ownership && e3sm-env git submodule update --init --recursive",
 
   "customizations": {
     "vscode": {
