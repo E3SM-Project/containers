@@ -165,6 +165,38 @@ F90
 mpifort mpi_f08.f90 -o mpi-f08
 mpirun -n 2 ./mpi-f08
 
+step "Python MPI: mpi4py built against and loading ${E3SM_MPI}, 2 ranks"
+E3SM_MPI="$E3SM_MPI" python3 - <<'PY'
+from importlib import metadata
+import os
+import re
+
+from mpi4py import MPI
+
+root = os.path.realpath(os.environ["MPI_ROOT"])
+# Built here (the Dockerfile's --no-binary), not PyPI's manylinux wheel, which dlopens
+# whatever libmpi it finds rather than linking this one.
+tags = metadata.distribution("mpi4py").read_text("WHEEL") or ""
+tags = re.findall(r"^Tag: *(\S+)", tags, re.M)
+print("mpi4py", metadata.version("mpi4py"), "wheel tags:", tags)
+assert tags and not any("manylinux" in tag for tag in tags), "mpi4py is a prebuilt wheel"
+# The libmpi this process actually loaded is the image's
+with open("/proc/self/maps") as maps:
+    libs = {line.split()[-1] for line in maps if "/libmpi" in line}
+print("libmpi:", *sorted(libs))
+assert libs and all(os.path.realpath(lib).startswith(root + "/") for lib in libs), \
+    f"mpi4py loaded {sorted(libs)}, not the MPI in {root}"
+# ... and is the implementation and version the image was built with
+name, _, version = os.environ["E3SM_MPI"].partition("@")
+banner = MPI.Get_library_version()
+prefix = {"openmpi": r"Open MPI v", "mpich": r"MPICH Version:\s*"}.get(name)
+assert prefix, f"no library-version check for {name}"
+assert re.search(prefix + re.escape(version), banner), \
+    f"expected {name} {version}, got: {banner.splitlines()[0]}"
+print("MPI:", banner.splitlines()[0])
+PY
+mpirun -n 2 python3 -c 'from mpi4py import MPI; c = MPI.COMM_WORLD; assert c.allreduce(1) == c.size == 2'
+
 step "netCDF-Fortran: write and read back through the .mod files"
 cat > nf.f90 <<'F90'
 program nf
@@ -237,6 +269,29 @@ mpicc par.c -o par $(nc-config --cflags) -I"$PARALLEL_NETCDF_ROOT/include" \
 mpirun -n 2 ./par
 ncdump hdf5.nc | grep 'v = 0, 1' >/dev/null
 ncmpidump pnetcdf.nc | grep 'v = 0, 1' >/dev/null
+
+step "Python netCDF4 reads what the spack stack wrote"
+# The netCDF4 wheel bundles its own serial netCDF-C and HDF5, separate from spack's. That
+# is fine for serial use as long as the two agree on the files, which is what this checks;
+# a version difference is reported, not failed on. (Parallel I/O from Python would need
+# netCDF4 built against spack's netcdf-c.)
+hdf5_version=$(sed -n 's/^#define H5_VERSION "\(.*\)"$/\1/p' "$HDF5_ROOT/include/H5pubconf.h" || true)
+SPACK_NETCDF="$(nc-config --version)" SPACK_HDF5="$hdf5_version" python3 - <<'PY'
+import os
+
+import netCDF4
+import numpy as np
+
+print("netCDF4", netCDF4.__version__, "bundles netCDF", netCDF4.__netcdf4libversion__,
+      "and HDF5", netCDF4.__hdf5libversion__)
+print("spack has", os.environ["SPACK_NETCDF"], "and HDF5", os.environ["SPACK_HDF5"])
+with open("/proc/self/maps") as maps:
+    libs = {line.split()[-1] for line in maps if "/libnetcdf" in line or "/libhdf5" in line}
+print("loaded:", *sorted(libs))
+for path, expected in (("hdf5.nc", [0, 1]), ("pnetcdf.nc", [0, 1]), ("nf.nc", [1, 2, 3])):
+    with netCDF4.Dataset(path) as dataset:
+        np.testing.assert_array_equal(dataset["v"][:], expected)
+PY
 
 step "LAPACK (${E3SM_LAPACK}): solve a 2x2 system from Fortran"
 cat > la.f90 <<'F90'
