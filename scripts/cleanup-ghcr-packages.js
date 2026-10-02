@@ -97,6 +97,8 @@ const NEVER_CLEAN = Object.freeze({ deleteOnPrClose: false, sweepByAge: false, i
 // Anything in between is a new policy object with its own isSweepable (plus a test).
 const PACKAGES = Object.freeze({
   'e3sm-ghci': DEFAULT_POLICY,
+  // BuildKit registry cache (build-multiarch.yaml's CACHE)
+  'e3sm-ghci-buildcache': DEFAULT_POLICY,
 });
 
 // pr-closed: the versions to delete for closed PR #<pr>.
