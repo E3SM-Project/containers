@@ -182,11 +182,16 @@ jobs:
       - name: Test GHCR cleanup selection
         run: node --test scripts/test/cleanup-ghcr-packages.test.js
       - name: Check all GitHub Actions workflows
-        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
 
-  # The variant list: one context (ghci/env), one set of build args per env. Each env is a
-  # single self-contained build: spack pulls whatever it can from our own and the E4S binary
-  # caches (see ghci/env/spack-configuration/mirrors.yaml) and builds only the rest.
+  # THE VARIANT LIST. One context (ghci/env), one set of build args per env, and the arches it
+  # is built for. This is the only place a variant is defined: `dev` and `promote` reuse this
+  # list through the `*variants` alias, and the per-arch jobs reuse `smoke`'s `*per_arch`
+  # matrix below. Add or change a variant here (and its arches in `*per_arch`), nowhere else.
+  #
+  # Each env is a single self-contained build: spack pulls whatever it can from our own and
+  # the E4S binary caches (see ghci/env/spack-configuration/mirrors.yaml) and builds only the
+  # rest.
   env:
     needs: [changes, suffix, lint]
     if: needs.changes.outputs.relevant == 'true' && needs.suffix.outputs.build == 'true'
@@ -199,7 +204,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        include: &variants
           - env: gnu-cpu-env
             arches: '["x86_64", "aarch64"]'
             args: |
@@ -252,14 +257,10 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
+      # The variant list from `env` (the build args there are for env; dev only needs the
+      # name and arches).
       matrix:
-        include:
-          - env: gnu-cpu-env
-            arches: '["x86_64", "aarch64"]'
-          - env: gnu-cuda-env
-            arches: '["x86_64", "aarch64"]'
-          - env: intel-cpu-env
-            arches: '["x86_64"]'
+        include: *variants
     with:
       image_name: e3sm-ghci
       tag: ${{ matrix.env }}-dev
@@ -284,18 +285,14 @@ jobs:
       packages: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - env: gnu-cpu-env
-            arch: x86_64
-          - env: gnu-cpu-env
-            arch: aarch64
-          - env: gnu-cuda-env
-            arch: x86_64
-          - env: gnu-cuda-env
-            arch: aarch64
+      # Every variant from `env` on each of its arches: reused by every per-arch job
+      # (`*per_arch`). Keep the exclusions in step with the `arches` in the variant list.
+      matrix: &per_arch
+        env: [gnu-cpu-env, gnu-cuda-env, intel-cpu-env]
+        arch: [x86_64, aarch64]
+        exclude:
           - env: intel-cpu-env
-            arch: x86_64
+            arch: aarch64
     name: smoke (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
@@ -338,18 +335,7 @@ jobs:
       packages: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - env: gnu-cpu-env
-            arch: x86_64
-          - env: gnu-cpu-env
-            arch: aarch64
-          - env: gnu-cuda-env
-            arch: x86_64
-          - env: gnu-cuda-env
-            arch: aarch64
-          - env: intel-cpu-env
-            arch: x86_64
+      matrix: *per_arch
     name: smoke-dev (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
@@ -455,6 +441,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *variants
+    name: promote (${{ matrix.env }})
     steps:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -465,22 +456,21 @@ jobs:
       - name: Retag the tested images
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
+          VARIANT: ${{ matrix.env }}
           FROM: ${{ needs.suffix.outputs.value }}
           TO: ${{ needs.suffix.outputs.release_suffix }}
         run: |
           image="${IMAGE,,}"
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
-          for env in gnu-cpu-env gnu-cuda-env intel-cpu-env; do
-            for tag in "$env" "$env-dev"; do
-              tested=$(digest "$image:$tag$FROM")
-              docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
-              published=$(digest "$image:$tag$TO")
-              echo "$image:$tag$TO = $published (tested as $tag$FROM = $tested)"
-              if [ "$published" != "$tested" ]; then
-                echo "::error::$tag$TO is $published, not the tested $tested"
-                exit 1
-              fi
-            done
+          for tag in "$VARIANT" "$VARIANT-dev"; do
+            tested=$(digest "$image:$tag$FROM")
+            docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
+            published=$(digest "$image:$tag$TO")
+            echo "$image:$tag$TO = $published (tested as $tag$FROM = $tested)"
+            if [ "$published" != "$tested" ]; then
+              echo "::error::$tag$TO is $published, not the tested $tested"
+              exit 1
+            fi
           done
 
   # Publish what the env builds compiled to our own Spack binary cache on GHCR (the `e3sm`
@@ -511,18 +501,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - env: gnu-cpu-env
-            arch: x86_64
-          - env: gnu-cpu-env
-            arch: aarch64
-          - env: gnu-cuda-env
-            arch: x86_64
-          - env: gnu-cuda-env
-            arch: aarch64
-          - env: intel-cpu-env
-            arch: x86_64
+      matrix: *per_arch
     name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
