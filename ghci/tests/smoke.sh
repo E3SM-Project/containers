@@ -44,6 +44,30 @@ if [ "${SMOKE_READONLY:-no}" != yes ]; then
     sudo -n true
 fi
 
+step "non-login commands: e3sm-env, the image's ENTRYPOINT"
+# What `docker exec`, `sh -c` hooks and batch launchers start from: no login environment.
+# env -i is stricter (it drops the image's ENV too), so passing here covers those.
+clean=(env -i HOME="$HOME" PATH=/usr/local/bin:/usr/bin:/bin)
+"${clean[@]}" e3sm-env cmake --version | sed -n 1p
+test "$("${clean[@]}" e3sm-env python3 -c 'import sys, netCDF4; print(sys.prefix)')" = /projects/e3sm/software/eamxx-venv
+test "$("${clean[@]}" e3sm-env printf '%s\n' 'a b' c)" = $'a b\nc'
+status=0
+"${clean[@]}" e3sm-env sh -c 'exit 3' || status=$?
+test "$status" -eq 3
+# It must exec the command, not wait on it: then a signal (docker stop, Ctrl-C, a scheduler's
+# kill) reaches the command itself. Wait for the login to finish and the pid to become sleep.
+"${clean[@]}" e3sm-env sleep 60 &
+pid=$!
+for _ in $(seq 120); do
+    [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = sleep ] && break
+    sleep 0.5
+done
+test "$(cat "/proc/$pid/comm")" = sleep
+kill -TERM "$pid"
+status=0
+wait "$pid" || status=$?
+test "$status" -eq 143
+
 step "module paths"
 roots=(HDF5_ROOT NETCDF_C_ROOT NETCDF_FORTRAN_ROOT PARALLEL_NETCDF_ROOT MPI_ROOT YAML_CPP_ROOT BOOST_ROOT)
 case "$E3SM_LAPACK" in

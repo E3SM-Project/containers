@@ -27,10 +27,31 @@ podman run --rm -it --userns=keep-id:uid=1000,gid=1000 \
   ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
 ```
 
-The default command is already `bash --login`. A plain `/bin/bash` gives you a non-login
-shell, which skips `/etc/profile.d` and leaves you without the modules, `SPACK_ARCH`, or
-the python venv. `--userns=keep-id:uid=1000,gid=1000` makes the mounts writable under
-rootless podman; drop it with docker (see [The default user](#the-default-user)).
+The default command is `bash --login`. `--userns=keep-id:uid=1000,gid=1000` makes the
+mounts writable under rootless podman; drop it with docker (see
+[The default user](#the-default-user)).
+
+### Running a command in the image
+
+The whole environment (lmod modules, `SPACK_ARCH`, the compiler, the python venv) is set
+up by `/etc/profile.d`, which only a **login** shell reads. The images handle that for you
+wherever they can:
+
+- **`docker run` / `podman run` with a command** goes through the image's entrypoint,
+  `e3sm-env`, which starts a login shell and `exec`s the command in it. So
+  `podman run --rm IMAGE cmake --version` or `podman run --rm IMAGE python3 script.py`
+  (the venv's python) just work; arguments are passed through unchanged, and signals and
+  the exit status are the command's own. `--entrypoint ''` gets you the bare image.
+- **`docker exec` / `podman exec` never use the entrypoint**, so a command there has the
+  image's `ENV` but none of the login environment. Use `podman exec -it CONTAINER bash -l`
+  for a shell, or `podman exec CONTAINER e3sm-env <command>`.
+- The same goes for anything else that starts a process in an existing container without
+  a login shell -- devcontainer lifecycle hooks (`sh -c`), `apptainer exec`: wrap the
+  command in `e3sm-env`.
+
+An interactive shell should still be a login shell (`bash -l`, which the default command
+is): it also gets the history key bindings and, in the `-dev` images, the prompt and
+completion, which profile.d sets up but cannot export.
 
 ## Available images
 
@@ -103,7 +124,9 @@ integrated terminal a `bash -l` profile, and wrap lifecycle hooks -- which run u
 ```
 
 `e3sm-env <cmd>` runs a command with the full login environment from a context that has
-none. Without it, `postCreateCommand` cannot find a compiler.
+none. It is also the images' entrypoint, but Dev Containers starts the container with its
+own command and runs the hooks through `docker exec`, so neither goes through it. Without
+it, `postCreateCommand` cannot find a compiler.
 
 **Credentials.** `git push` over SSH needs no setup: VS Code forwards your ssh-agent, and
 the `-dev` images drop the base image's `git@github.com:` -> HTTPS rewrite (which exists so
@@ -171,10 +194,13 @@ What differs from docker/podman:
   lives in `/etc/profile.d`, which only a login shell reads, and `apptainer exec` does not
   start one. *Tested:*
   - `apptainer run img.sif` runs the image's default command, `bash --login`;
+  - `apptainer run img.sif <command>` runs the command through the image's entrypoint,
+    `e3sm-env`;
   - `apptainer exec img.sif bash -l -c '<command>'`;
   - `apptainer exec img.sif e3sm-env <command>`.
 
-  A plain `apptainer exec img.sif cmake --version` finds none of the modules.
+  `apptainer exec` does not use the entrypoint, so a plain
+  `apptainer exec img.sif cmake --version` finds none of the modules.
 - **Use `--cleanenv` (`-e`).** By default your host environment is passed into the
   container, so host `PATH`, `LD_LIBRARY_PATH`, `PYTHONPATH`, certificate-bundle variables
   and the like can shadow or break what the image provides. `--cleanenv` keeps the image's
@@ -330,7 +356,8 @@ anywhere.
 ## Size reports and runtime checks
 
 For same-repository PRs, CI tests every published env/platform combination as the non-root
-user (and `gnu-cpu-env` on x86_64 again under Apptainer, see above): login environment, writable venv, Python dependency consistency, NetCDF round-trip,
+user (and `gnu-cpu-env` on x86_64 again under Apptainer, see above): login environment,
+commands run without a login shell (through `e3sm-env`), writable venv, Python dependency consistency, NetCDF round-trip,
 Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
 an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
 

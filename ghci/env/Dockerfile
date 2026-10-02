@@ -106,7 +106,8 @@ RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
 RUN git config --system url."https://github.com/".insteadOf git@github.com:
 
 # Run a command with the full login environment (modules, SPACK_ARCH, venv) from a context
-# that does not get one: `e3sm-env cmake --version`.
+# that does not get one: `e3sm-env cmake --version`. It is also the image's ENTRYPOINT (see
+# the end), so `docker run IMAGE cmake --version` goes through it too.
 RUN printf '%s\n' '#!/bin/bash -l' 'exec "$@"' > /usr/local/bin/e3sm-env && \
     chmod 0755 /usr/local/bin/e3sm-env
 
@@ -391,6 +392,17 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
 
 WORKDIR ${HOME}
 
-ENTRYPOINT []
-# --login, so /etc/profile.d (SPACK_ARCH, the compiler, modules, the venv) applies
+# Every command the container is started with runs through e3sm-env, so `docker run IMAGE
+# cmake --version`, `apptainer run IMAGE <cmd>`, batch launchers and anything else that hands
+# the image a command get the same environment as a login shell. It execs the command, so
+# signals and the exit status are the command's own. `docker exec` and `apptainer exec` never
+# use the entrypoint: there it is `bash -l` or `e3sm-env <cmd>`, as before.
+# With the default CMD, and with `docker run IMAGE bash -l ...`, this logs in twice. That is
+# safe to repeat: lmod's `module purge` undoes the outer loads before loading them again,
+# and the venv is activated again so it stays ahead of the python module on PATH (skipping
+# that because VIRTUAL_ENV is already set would leave spack's python3 first). What is left
+# over is a few duplicate PATH entries, in the right order.
+ENTRYPOINT [ "/usr/local/bin/e3sm-env" ]
+# Still --login: an interactive shell also wants what profile.d sets up but does not export
+# (the history key bindings; the -dev prompt and completion).
 CMD [ "/bin/bash", "--login" ]
