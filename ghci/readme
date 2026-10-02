@@ -142,6 +142,14 @@ process in the container, agents included, being able to read those credentials.
 those works. Claude Code on macOS keeps its token in the **Keychain**, so it cannot be
 mounted in -- log in once inside and the `~/.claude` volume keeps it across rebuilds.
 
+**Trust.** A bind-mounted checkout is owned by your host uid, which git calls "dubious
+ownership" when it is not the container user's. The `-dev` images mark everything under
+`/projects/e3sm/work` (submodules included) as safe for git, and nothing else; for a
+checkout elsewhere, run `git config --global --add safe.directory <path>` once. The example
+leaves VS Code's Workspace Trust on, so VS Code asks once whether to trust the folder (and
+may ask again after a rebuild); its comments show how to turn the prompt off and what that
+costs.
+
 ## The default user
 
 The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
@@ -374,8 +382,8 @@ commands run without a login shell (through `e3sm-env`), writable venv, Python d
 Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
 an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
 
-`ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (a
-Dev Containers uid remap). CI does not smoke-test the `-dev` images yet, so it is not run
+`ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (git
+in a checkout owned by another uid, a Dev Containers uid remap). CI does not smoke-test the `-dev` images yet, so it is not run
 there; run it by hand as its header shows.
 
 The ARM CUDA image currently has one verified upstream packaging defect:

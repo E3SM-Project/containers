@@ -105,10 +105,14 @@
         "twxs.cmake"
       ],
       "settings": {
-        // Open trusted, without the Workspace Trust prompt on every rebuild. This lands in
-        // the container's remote user settings, which is why an application-scoped setting
-        // takes effect here at all.
-        "security.workspace.trust.enabled": false,
+        // Workspace Trust is left on: VS Code asks once whether to trust the folder before it
+        // lets tasks, launch configs and extensions run code from it, and a rebuilt
+        // container may ask again. To skip the prompt, add
+        //   "security.workspace.trust.enabled": false,
+        // here (it lands in the container's remote user settings, which is why this
+        // application-scoped setting takes effect at all) -- but that trusts every folder
+        // opened in this container, which also holds your forwarded ssh-agent and the
+        // agents' credentials, not just this checkout.
 
         // Same login-shell reason as userEnvProbe above.
         "terminal.integrated.profiles.linux": {

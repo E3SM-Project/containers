@@ -120,8 +120,12 @@ RUN mkdir -p /home/${E3SM_USER}/.cache/ccache \
     chown -R ${E3SM_USER}:${E3SM_USER} /home/${E3SM_USER}
 
 # A bind-mounted repo is owned by the host's uid, which need not be ours; without this git
-# refuses to operate on it ("dubious ownership"). Normal for a dev container.
-RUN git config --system --add safe.directory '*'
+# refuses to operate on it ("dubious ownership"). Trust that only where checkouts are meant
+# to go, not everywhere ('*'): git >= 2.46 (UBI9 has 2.52) reads a trailing /* as "anything
+# under this path", which covers the checkout and every nested submodule, each of which git
+# checks separately. ~/work is a symlink to it, and git compares the resolved path. A
+# checkout elsewhere needs its own `git config --global --add safe.directory <path>`.
+RUN git config --system --add safe.directory '/projects/e3sm/work/*'
 
 # On a Linux host whose uid is not 1000, Dev Containers' updateRemoteUserUID gives e3sm the
 # host user's uid/gid, but only re-owns $HOME: the venv and the /projects/e3sm dirs stay

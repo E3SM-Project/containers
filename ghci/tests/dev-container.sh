@@ -1,6 +1,7 @@
 #!/bin/bash
 # Checks for the -dev images that need root to set up what a Dev Containers host does to the
-# container. Run as root, in a throwaway container -- it changes e3sm's uid:
+# container: a checkout owned by another uid, and a remapped uid. Run as root, in a
+# throwaway container -- it changes e3sm's uid:
 # docker run --rm --user root -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
 #   IMAGE-dev bash /opt/ghci-tests/dev-container.sh
 #
@@ -14,6 +15,25 @@ trap 'rm -rf "$work"' EXIT
 step() { echo "== $*"; }
 # A fresh login shell as e3sm, the way VS Code's terminals and userEnvProbe get one
 as_e3sm() { sudo -u e3sm -H bash -lc "$1"; }
+
+step "git: a checkout owned by another uid is trusted under /projects/e3sm/work only"
+# Like a bind mount from a host whose uid is not e3sm's: a repo with a submodule, owned by
+# uid 4321, in the workspace and somewhere else
+g() { git -c user.name=smoke -c user.email=smoke@localhost -c protocol.file.allow=always "$@"; }
+g init -q "$work/sub"
+g -C "$work/sub" commit -q --allow-empty -m sub
+g init -q "$work/E3SM"
+g -C "$work/E3SM" submodule --quiet add "$work/sub" externals/sub
+g -C "$work/E3SM" commit -q -m super
+cp -a "$work/E3SM" /projects/e3sm/work/E3SM
+cp -a "$work/E3SM" "$work/elsewhere"
+chown -R 4321:4321 /projects/e3sm/work/E3SM "$work/elsewhere"
+as_e3sm 'git -C /projects/e3sm/work/E3SM status --short'
+as_e3sm 'git -C /projects/e3sm/work/E3SM submodule foreach --recursive git status --short'
+as_e3sm 'cd ~/work/E3SM/externals/sub && git status --short'
+out=$(as_e3sm "git -C '$work/elsewhere' status --short" 2>&1) || true
+grep -q 'dubious ownership' <<<"$out" || { echo "git trusts a foreign-owned repo outside /projects/e3sm/work: $out" >&2; exit 1; }
+rm -rf /projects/e3sm/work/E3SM
 
 step "uid 1000, nothing remapped: e3sm-fix-ownership does nothing"
 test "$(id -u e3sm)" -eq 1000
