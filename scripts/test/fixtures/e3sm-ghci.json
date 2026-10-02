@@ -1,0 +1,299 @@
+{
+  "_comment": "A snapshot of one GHCR package for cleanup-ghcr-packages.test.js. `versions` is what the REST API lists (digests named for readability), `manifests` maps each tagged digest to the digests its manifest references, and `now` is the time the tests sweep at. The test file describes what each version stands for.",
+  "now": "2026-10-02T00:00:00Z",
+  "versions": [
+    {
+      "id": 1,
+      "name": "sha256:base-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "base"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "name": "sha256:base-amd64",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "sha256:base-arm64",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 4,
+      "name": "sha256:base-amd64-att",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 5,
+      "name": "sha256:base-arm64-att",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 6,
+      "name": "sha256:dev-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "dev",
+            "dev-pr-12"
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "name": "sha256:dev-amd64",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 8,
+      "name": "sha256:pr99-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "dev-pr-99"
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "name": "sha256:pr99-amd64",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 10,
+      "name": "sha256:mg-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "base-mg-0123456789abcdef0123456789abcdef01234567"
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "name": "sha256:mg-amd64",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 12,
+      "name": "sha256:mgpr-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "base-mg-0123456789abcdef0123456789abcdef01234567",
+            "base-pr-123"
+          ]
+        }
+      }
+    },
+    {
+      "id": 13,
+      "name": "sha256:mgmain-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "base-x",
+            "base-mg-0123456789abcdef0123456789abcdef01234567"
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "name": "sha256:mg-young",
+      "created_at": "2026-10-01T12:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "dev-mg-0123456789abcdef0123456789abcdef01234567"
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "name": "sha256:mg-short",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "base-mg-abc123"
+          ]
+        }
+      }
+    },
+    {
+      "id": 16,
+      "name": "sha256:cache-index",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "buildcache-base-x86_64"
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "name": "sha256:cache-blob",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 18,
+      "name": "sha256:cache-mg",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "buildcache-base-mg-0123456789abcdef0123456789abcdef01234567-aarch64"
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "name": "sha256:cache-pr",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": [
+            "buildcache-base-pr-12-aarch64"
+          ]
+        }
+      }
+    },
+    {
+      "id": 20,
+      "name": "sha256:orphan-old",
+      "created_at": "2026-09-20T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 21,
+      "name": "sha256:orphan-young",
+      "created_at": "2026-10-01T12:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": 22,
+      "name": "sha256:orphan-exact",
+      "created_at": "2026-09-30T00:00:00Z",
+      "metadata": {
+        "package_type": "container",
+        "container": {
+          "tags": []
+        }
+      }
+    }
+  ],
+  "manifests": {
+    "sha256:base-index": [
+      "sha256:base-amd64",
+      "sha256:base-arm64",
+      "sha256:base-amd64-att",
+      "sha256:base-arm64-att"
+    ],
+    "sha256:dev-index": [
+      "sha256:dev-amd64"
+    ],
+    "sha256:pr99-index": [
+      "sha256:pr99-amd64"
+    ],
+    "sha256:mg-index": [
+      "sha256:mg-amd64"
+    ],
+    "sha256:mgpr-index": [],
+    "sha256:mgmain-index": [],
+    "sha256:mg-young": [],
+    "sha256:mg-short": [],
+    "sha256:cache-index": [
+      "sha256:cache-blob"
+    ],
+    "sha256:cache-mg": [],
+    "sha256:cache-pr": []
+  }
+}

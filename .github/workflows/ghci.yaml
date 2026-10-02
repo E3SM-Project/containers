@@ -122,6 +122,11 @@ jobs:
           bash -n ghci/tests/apptainer.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
+      # cleanup-ghcr-packages.yaml deletes package versions on a schedule; its selection logic
+      # is tested here, against the runner's preinstalled node, so a change to it is checked
+      # before it can delete anything.
+      - name: Test GHCR cleanup selection
+        run: node --test scripts/test/cleanup-ghcr-packages.test.js
       - name: Check all GitHub Actions workflows
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
 
