@@ -186,6 +186,7 @@ jobs:
           bash -n ghci/tests/smoke.sh
           bash -n ghci/tests/smoke-dev.sh
           bash -n ghci/tests/apptainer.sh
+          bash -n ghci/tests/dev-container.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
       # cleanup-ghcr-packages.yaml deletes package versions on a schedule; its selection logic
