@@ -219,6 +219,11 @@ jobs:
           labels: |
             org.opencontainers.image.title=${{ inputs.tag }}
             org.opencontainers.image.description=${{ inputs.description }}
+          # The index annotations come from this input, not from `labels` above: without it they
+          # fall back to the repository's name and description.
+          annotations: |
+            org.opencontainers.image.title=${{ inputs.tag }}
+            org.opencontainers.image.description=${{ inputs.description }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
