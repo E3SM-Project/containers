@@ -35,6 +35,11 @@ jobs:
   # workflow or not also for merge_group events. Two exceptions for which we ALWAYS run:
   #  - workflow_dispatch: is a deliberate manual request, so we assume we want to run
   #  - ref_type=='tag': if we push a tag, we want to ensure it is working, so run all tests
+  #
+  # Two filters, one per stage, so a change only rebuilds what it can affect: `env` (the env
+  # image and everything downstream of it) and `dev` (only the dev layer, which then builds
+  # FROM main's env images, the way a fork PR's does). Docs, the devcontainer example and the
+  # GHCR cleanup script match neither, so they build nothing; `lint` still checks them.
   changes:
     runs-on: ubuntu-latest
     permissions:
@@ -44,7 +49,9 @@ jobs:
       # read access to the PR itself.
       pull-requests: read
     outputs:
-      relevant: ${{ steps.filter.outputs.relevant || steps.force.outputs.relevant }}
+      env: ${{ steps.filter.outputs.env || steps.force.outputs.env }}
+      dev: ${{ steps.filter.outputs.dev || steps.force.outputs.dev }}
+      relevant: ${{ steps.filter.outputs.env == 'true' || steps.filter.outputs.dev == 'true' || steps.force.outputs.env == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -52,14 +59,20 @@ jobs:
         if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
         with:
           filters: |
-            relevant:
-              - 'ghci/**'
+            env:
+              - 'ghci/env/**'
+              - 'ghci/tests/**'
               - '.github/workflows/ghci.yaml'
               - '.github/workflows/build-multiarch.yaml'
-              - 'scripts/**'
+              - 'scripts/check-oci-metadata.py'
+              - 'scripts/image-size.py'
+            dev:
+              - 'ghci/dev/Dockerfile'
       - id: force
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-        run: echo "relevant=true" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "env=true" >> "$GITHUB_OUTPUT"
+          echo "dev=true" >> "$GITHUB_OUTPUT"
 
   # What this run builds, where it stages, and what it then publishes.
   #
@@ -159,9 +172,8 @@ jobs:
             echo "cache=$cache"
           } >> "$GITHUB_OUTPUT"
 
+  # Cheap, so it runs on every change, including the ones that build nothing.
   lint:
-    needs: changes
-    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -194,7 +206,7 @@ jobs:
   # rest.
   env:
     needs: [changes, suffix, lint]
-    if: needs.changes.outputs.relevant == 'true' && needs.suffix.outputs.build == 'true'
+    if: needs.changes.outputs.env == 'true' && needs.suffix.outputs.build == 'true'
     name: ${{ matrix.env }}
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -247,8 +259,13 @@ jobs:
       cache_suffix: ${{ needs.suffix.outputs.cache }}
       build_args: ${{ matrix.args }}
 
+  # Builds FROM this run's env image, or, when this change leaves env alone (`env` skipped),
+  # FROM main's.
   dev:
-    needs: [suffix, env]
+    needs: [changes, suffix, env]
+    if: >-
+      ${{ !cancelled() && needs.suffix.outputs.build == 'true' && needs.changes.outputs.relevant == 'true'
+      && (needs.env.result == 'success' || (needs.env.result == 'skipped' && needs.changes.outputs.env != 'true')) }}
     name: ${{ matrix.env }}-dev
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -270,7 +287,7 @@ jobs:
       tag_suffix: ${{ needs.suffix.outputs.value }}
       cache_suffix: ${{ needs.suffix.outputs.cache }}
       build_args: |
-        BASE_TAG=${{ matrix.env }}${{ needs.suffix.outputs.value }}
+        BASE_TAG=${{ matrix.env }}${{ needs.changes.outputs.env == 'true' && needs.suffix.outputs.value || '' }}
         VARIANT=${{ matrix.env }}
 
   # Smoke-test freshly published images on separate runners, so pulling/running them
@@ -436,8 +453,9 @@ jobs:
       ${{ !cancelled() && needs.changes.outputs.relevant == 'true'
       && needs.suffix.outputs.promote == 'true'
       && (needs.suffix.outputs.build == 'false'
-      || (needs.env.result == 'success' && needs.dev.result == 'success' && needs.smoke.result == 'success'
-      && needs['smoke-dev'].result == 'success' && needs.apptainer.result == 'success')) }}
+      || (needs.dev.result == 'success' && needs['smoke-dev'].result == 'success'
+      && (needs.changes.outputs.env != 'true'
+      || (needs.env.result == 'success' && needs.smoke.result == 'success' && needs.apptainer.result == 'success')))) }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -462,7 +480,14 @@ jobs:
         run: |
           image="${IMAGE,,}"
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+          promoted=0
           for tag in "$VARIANT" "$VARIANT-dev"; do
+            # A change that left env alone rebuilt only dev, so there is no tested env image
+            # to promote: the published env tag already is the one dev was built and tested on.
+            if ! docker buildx imagetools inspect "$image:$tag$FROM" > /dev/null 2>&1; then
+              echo "$tag$FROM was not rebuilt; $tag$TO stays as it is"
+              continue
+            fi
             tested=$(digest "$image:$tag$FROM")
             docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
             published=$(digest "$image:$tag$TO")
@@ -471,7 +496,12 @@ jobs:
               echo "::error::$tag$TO is $published, not the tested $tested"
               exit 1
             fi
+            promoted=$((promoted + 1))
           done
+          if [ "$promoted" -eq 0 ]; then
+            echo "::error::no tested $VARIANT image with suffix $FROM to promote"
+            exit 1
+          fi
 
   # Publish what the env builds compiled to our own Spack binary cache on GHCR (the `e3sm`
   # mirror in ghci/env/spack-configuration/mirrors.yaml), so rebuilds, new variants and the
@@ -493,8 +523,11 @@ jobs:
   # of the change, so a GHCR hiccup or a slow first upload shows up as a red job but must not
   # block the merge queue.
   buildcache:
-    needs: [suffix, promote]
-    if: needs.promote.result == 'success' && github.repository_owner == 'E3SM-Project'
+    needs: [changes, suffix, promote]
+    # A dev-only change built no env image, so there is nothing new to push.
+    if: >-
+      needs.promote.result == 'success' && needs.changes.outputs.env == 'true' &&
+      github.repository_owner == 'E3SM-Project'
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
