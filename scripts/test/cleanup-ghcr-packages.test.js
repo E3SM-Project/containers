@@ -33,6 +33,22 @@ test('merge_group tags: full 40-hex sha, optional trailing arch', () => {
   assert.ok(!c.MG_RE.test(`base-mg-${SHA.toUpperCase()}`));
 });
 
+test('RC_RE: -rc-<run_id> staging tags, with an optional arch', () => {
+  assert.ok(c.RC_RE.test('base-rc-123456789'));
+  assert.ok(c.RC_RE.test('base-dev-rc-123456789'));
+  assert.ok(!c.RC_RE.test('base-rc-'));
+  assert.ok(!c.RC_RE.test('base-rc-abc'));
+});
+
+test('isEphemeralMergeGroup: -rc- staging tags age out like -mg- ones, unless promoted', () => {
+  const eph = tags => c.isEphemeralMergeGroup(version('x', tags));
+  assert.ok(eph(['base-rc-42']));
+  assert.ok(eph(['base-rc-42', `base-mg-${SHA}`]));
+  // promote retags the tested digest, so the version now also carries the published tag
+  assert.ok(!eph(['base-rc-42', 'base']));
+  assert.ok(!eph(['base-rc-42', 'base-26.10']));
+});
+
 test('isEphemeralMergeGroup: needs an -mg- tag, and every other tag -mg- or -pr-', () => {
   const eph = tags => c.isEphemeralMergeGroup(version('x', tags));
   assert.ok(eph([`base-mg-${SHA}`]));

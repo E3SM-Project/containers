@@ -28,11 +28,15 @@ const ARCH = '(?:-(?:x86_64|aarch64))?';
 // PR to key cleanup on the way pr-closed does (a merge_group run can batch several PRs), so
 // these age out in the untagged mode instead, same as genuinely untagged versions.
 //
-// build-multiarch.yaml also scopes a PR/merge_group run's own cache-to writes to
-// buildcache-<tag>-pr-<N>-<arch> / buildcache-<tag>-mg-<sha>-<arch> (see its tag_suffix
-// input), so both patterns accept an optional trailing arch too, on top of the plain image
+// BuildKit cache tags carry an arch (<tag>-pr-<N>-<arch> in e3sm-ghci-buildcache, and the
+// older buildcache-<tag>-...-<arch> ones in e3sm-ghci; see build-multiarch.yaml's cache_suffix
+// input), so the patterns accept an optional trailing arch too, on top of the plain image
 // tags.
 const MG_RE = new RegExp(`-mg-[0-9a-f]{40}${ARCH}$`);
+// Tag pushes, dispatches and untested pushes to main stage under <tag>-rc-<run_id> before
+// ghci.yaml's `promote` job retags what passed; the staging tags age out the same way.
+const RC_RE = new RegExp(`-rc-\\d+${ARCH}$`);
+const isStaging = x => MG_RE.test(x) || RC_RE.test(x);
 const PR_RE = new RegExp(`-pr-\\d+${ARCH}$`);
 
 // The tags of one package version (the REST API's `metadata.container.tags`).
@@ -53,7 +57,7 @@ const prTagRe = pr => new RegExp(`-pr-${pr}${ARCH}$`);
 // removes those, on PR close.
 function isEphemeralMergeGroup(v) {
   const t = tagsOf(v);
-  return t.length > 0 && t.some(x => MG_RE.test(x)) && t.every(x => MG_RE.test(x) || PR_RE.test(x));
+  return t.length > 0 && t.some(isStaging) && t.every(x => isStaging(x) || PR_RE.test(x));
 }
 
 // buildcache-* tags are never swept by age while still live. An earlier version of this job
@@ -362,6 +366,7 @@ async function main(argv = process.argv.slice(2), env = process.env, log = actio
 
 module.exports = {
   MG_RE,
+  RC_RE,
   PR_RE,
   DEFAULT_POLICY,
   NEVER_CLEAN,
