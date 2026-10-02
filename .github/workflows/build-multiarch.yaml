@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       tag:
-        description: 'Arch-independent tag to publish (e.g. gnu-cpu-env)'
+        description: 'Arch-independent tag to publish (e.g. gnu13-openmpi4)'
         required: true
         type: string
       context:
@@ -158,7 +158,7 @@ jobs:
           echo -n "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
 
       # Arch first, so the download pattern below cannot also match a longer tag that this
-      # one is a prefix of (e.g. gnu-cpu-env vs gnu-cpu-env-dev).
+      # one is a prefix of (e.g. gnu13-openmpi4 vs gnu13-openmpi4-dev).
       - name: Upload digest
         if: env.PUSH == 'true'
         uses: actions/upload-artifact@v7

@@ -1,10 +1,10 @@
 // Example .devcontainer/devcontainer.json for the E3SM monorepo. Copy into E3SM, do not
 // use from here. Comments call out the settings that matter for these images.
 {
-  "name": "E3SM (gnu-cpu)",
+  "name": "E3SM (gnu13-openmpi4)",
 
   // One tag, both arches: this resolves to the native image on Apple Silicon and x86_64.
-  "image": "ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env-dev",
+  "image": "ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4-dev",
 
   // The image's non-root user. On Linux the Dev Containers extension rewrites its uid/gid
   // to match yours so bind-mounted files are not owned by the wrong user.

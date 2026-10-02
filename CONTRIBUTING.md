@@ -5,7 +5,7 @@ Contributions are welcome.
 Suppose you want to add a new container named `xyz` to this repository:
 
 1. Add a directory named `xyz/` with the recipe (a `Dockerfile`, or several under
-   subdirectories if the build has stages) and a `readme` describing what the image is for
+   subdirectories if the build has stages) and a `README.md` describing what the image is for
    and how to run it.
 2. Add a workflow at `.github/workflows/xyz.yaml` that builds it. Filter relevant paths
    inside the workflow if its status check is required, as `ghci.yaml` does, so unrelated
@@ -37,13 +37,15 @@ Before opening a PR, run the lightweight checks (no image build needed):
 ```bash
 python3 scripts/check-dockerfiles.py
 bash -n ghci/tests/smoke.sh
+bash -n ghci/tests/smoke-dev.sh
 bash -n ghci/tests/apptainer.sh
 python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
 git diff --check
 ```
 
 The PR workflow also runs actionlint, builds each supported platform, and runs runtime
-smoke checks on the published env images. Fork PRs cannot publish; their smoke jobs are
+smoke checks on the published env and `-dev` images. Fork PRs cannot publish; their smoke jobs are
 skipped. GPU images are tested for imports and CPU execution on standard runners; actual
 GPU execution still needs an NVIDIA host. The same smoke checks also run under Apptainer
 (`ghci/tests/apptainer.sh`), which you can run locally against any image. Spack builds

@@ -2,7 +2,7 @@
 # Qualify an env image under Apptainer, the way HPC users run it. Needs apptainer and no
 # special privileges. Usage:
 #   ghci/tests/apptainer.sh SOURCE
-# where SOURCE is anything `apptainer build` accepts: docker://ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env,
+# where SOURCE is anything `apptainer build` accepts: docker://ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4,
 # docker-daemon:IMAGE, or an existing .sif file. Set EXPECT_CUDA=yes|no to match the image.
 #
 # What differs from `docker run`, and is checked here: the user is the host user (not e3sm),

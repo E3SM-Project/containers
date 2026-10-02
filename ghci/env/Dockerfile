@@ -1,7 +1,7 @@
 FROM registry.access.redhat.com/ubi9-minimal:latest
 
 # One recipe for every env variant. The variants themselves (which args each one sets) are
-# the matrix in .github/workflows/ghci.yaml; the defaults below are the gnu-cpu-env values.
+# the matrix in .github/workflows/ghci.yaml; the defaults below are the gnu13-openmpi4 values.
 # Nothing here is parameterized by arch: each arch is built natively and works out what it
 # needs from `uname -m`.
 #
