@@ -169,6 +169,13 @@ jobs:
       - name: Lowercase image ref
         run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
 
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          show-progress: false
+          persist-credentials: false
+
       - name: Download digests
         uses: actions/download-artifact@v8
         with:
@@ -227,3 +234,20 @@ jobs:
             args+=("$IMAGE@$(cat "$f")")
           done
           docker buildx imagetools create "${args[@]}"
+
+      # Read back what was actually published: a metadata step that is misconfigured or whose
+      # output is never used fails silently otherwise. The expected revision and source come
+      # from this run's own context, not from metadata-action's output, so a wrong value there
+      # fails here instead of being compared against itself. Uses the `scripts/` checkout above.
+      - name: Verify OCI labels and annotations
+        env:
+          TITLE: ${{ inputs.tag }}
+          DESCRIPTION: ${{ inputs.description }}
+          ARCHES: ${{ inputs.arches }}
+          REVISION: ${{ github.sha }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          mapfile -t images < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          python3 scripts/check-oci-metadata.py "${images[@]}" \
+            --arches "$ARCHES" --title "$TITLE" --description "$DESCRIPTION" \
+            --revision "$REVISION" --source "$SOURCE"
