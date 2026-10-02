@@ -44,6 +44,12 @@ class StaleStaging(unittest.TestCase):
         self.assertFalse(is_stale_staging(version("d", ["env-mg-abc123"])))   # not a full sha
         self.assertFalse(is_stale_staging(version("d")))
 
+    def test_release_candidate_tags_age_out_unless_promoted(self):
+        self.assertTrue(is_stale_staging(version("d", ["env-rc-42", "env-dev-rc-42"])))
+        # promote retags the tested digest, so it now also carries the published tag
+        self.assertFalse(is_stale_staging(version("d", ["env-rc-42", "env"])))
+        self.assertFalse(is_stale_staging(version("d", ["env-rc-abc"])))
+
 
 class Deletable(unittest.TestCase):
     def test_keeps_what_tagged_versions_reference(self):

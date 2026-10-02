@@ -18,8 +18,11 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
   emulation. To force one, use `--platform linux/amd64` / `--platform linux/arm64`, not a
   different tag. `.github/workflows/build-multiarch.yaml` implements this once for
   everyone.
-- **Tag suffixes.** `<tag>` is what `main` publishes; `<tag>-pr-<N>` is a pull request
-  build; `<tag>-<version>` comes from a release tag such as `ghci-1.2.3`.
+- **Tag suffixes.** `<tag>` is what `main` publishes; `<tag>-<version>` comes from a
+  release tag such as `ghci-1.2.3`. Both only ever point at images that passed CI's smoke
+  tests: they are retagged from a tested build, never built directly. `<tag>-pr-<N>` is a
+  pull request build; `-mg-<sha>` (merge queue) and `-rc-<run>` (release candidate) tags are
+  CI's staging tags and are cleaned up after two days.
 - **Non-root by default.** Runtime images run as `e3sm` (uid 1000) with passwordless
   `sudo`, because MPI refuses to run as root and bind-mounted files should not come back
   owned by root.

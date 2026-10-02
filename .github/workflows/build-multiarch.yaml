@@ -32,17 +32,21 @@ on:
         required: false
         type: string
         default: ''
-      release_pattern:
-        description: 'Git tag pattern whose capture group becomes the image tag suffix'
-        required: false
-        type: string
-        default: 'ghci-(.*)'
       tag_suffix:
         description: >-
-          This run's suffix (e.g. -pr-42, -mg-<sha>), same as what the caller appends to
-          BASE_TAG build-args; empty on a push to main. Scopes this run's own cache-to
-          writes so a PR (or merge_group run) never overwrites the shared cache main and
-          other PRs read from -- see the cache-from/cache-to comment below.
+          This run's suffix (-pr-<N>, -mg-<sha>, -rc-<run_id>), same as what the caller
+          appends to BASE_TAG build-args. The image is published as <tag><tag_suffix> only:
+          the tags people pull are never written by a build, only by ghci.yaml's `promote`
+          job, once the image has been tested. Empty only for a fork PR, which publishes
+          nothing.
+        required: false
+        type: string
+        default: ''
+      cache_suffix:
+        description: >-
+          Scope of this run's BuildKit cache writes: empty for the shared cache that main,
+          tags and every PR read, -pr-<N> or -<branch> for unreviewed work -- see the
+          cache-from/cache-to comment below.
         required: false
         type: string
         default: ''
@@ -54,9 +58,9 @@ env:
   CACHE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}-buildcache
   # A fork PR gets no packages:write, so nothing can be pushed and there is nothing to merge:
   # it still builds every stage, as validation, FROM the images main published. merge_group
-  # runs are not excluded here: they publish too (under an ephemeral -mg-<sha> tag, see the
-  # Meta step below), so that a stage this PR changes builds FROM the sibling stage this same
-  # run just published, not from main's possibly-stale tag.
+  # runs are not excluded here: they publish too (under an ephemeral -mg-<sha> tag), so that a
+  # stage this PR changes builds FROM the sibling stage this same run just published, not from
+  # main's possibly-stale tag.
   PUSH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
@@ -127,21 +131,26 @@ jobs:
           # and isn't branch-scoped, so PRs and main naturally share it. Skipped on cache-to for fork
           # PRs, which can't push; they still read whatever main last published.
           #
-          # cache-to only ever writes this run's own <tag><tag_suffix>-<arch> tag, never the plain
-          # <tag>-<arch> one main and every other PR reads from: a PR (or
-          # merge_group run) that touches this stage's Dockerfile would otherwise overwrite the
-          # shared cache with its own not-yet-reviewed content, forcing every unrelated concurrent
-          # PR (and main itself, if this PR never merges) into a cold rebuild the next time they
-          # import it. cache-from still reads the plain tag too (as a second, lower-priority
-          # source), so a PR's first build still benefits from whatever main last cached; its own
-          # suffixed tag only exists once this run's cache-to has written it at least once (e.g. a
-          # second push to the same PR), and a not-yet-existing cache-from source is a soft error
-          # buildx logs and skips, not a build failure. tag_suffix is empty on a push to main, so
-          # both cache-from lines and cache-to collapse onto the one plain tag, same as before.
+          # cache-to writes this run's <tag><cache_suffix>-<arch> tag. For a PR (or a dispatch on
+          # another branch) that is its own suffixed tag, never the plain <tag>-<arch> one every
+          # other run reads from: a PR that touches this stage's Dockerfile would otherwise
+          # overwrite the shared cache with its own not-yet-reviewed content, forcing every
+          # unrelated concurrent PR (and main itself, if this PR never merges) into a cold rebuild
+          # the next time they import it. cache-from still reads the plain tag too (as a second,
+          # lower-priority source), so a PR's first build still benefits from the shared cache;
+          # its own suffixed tag only exists once this run's cache-to has written it at least once
+          # (e.g. a second push to the same PR), and a not-yet-existing cache-from source is a
+          # soft error buildx logs and skips, not a build failure.
+          #
+          # The merge queue, tags and dispatches on main write the shared tag (empty
+          # cache_suffix). A push to main no longer builds anything (it promotes what the merge
+          # queue tested), so the queue is what keeps the shared cache current. Its content is
+          # reviewed and about to land, and a cache is keyed by content: a batch the queue drops
+          # costs later builds some cache hits, never a wrong image.
           cache-from: |
-            type=registry,ref=${{ env.CACHE }}:${{ inputs.tag }}${{ inputs.tag_suffix }}-${{ matrix.arch }}
-            ${{ inputs.tag_suffix != '' && format('type=registry,ref={0}:{1}-{2}', env.CACHE, inputs.tag, matrix.arch) || '' }}
-          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:{1}{2}-{3},mode=max,ignore-error=true', env.CACHE, inputs.tag, inputs.tag_suffix, matrix.arch) || '' }}
+            type=registry,ref=${{ env.CACHE }}:${{ inputs.tag }}${{ inputs.cache_suffix }}-${{ matrix.arch }}
+            ${{ inputs.cache_suffix != '' && format('type=registry,ref={0}:{1}-{2}', env.CACHE, inputs.tag, matrix.arch) || '' }}
+          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:{1}{2}-{3},mode=max,ignore-error=true', env.CACHE, inputs.tag, inputs.cache_suffix, matrix.arch) || '' }}
       - name: Export digest
         if: env.PUSH == 'true'
         run: |
@@ -207,20 +216,9 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.IMAGE }}
+          # One tag, the run's own (see tag_suffix): consumer tags are promoted, not built.
           tags: |
-            type=raw,value=${{ inputs.tag }},enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=pr,prefix=${{ inputs.tag }}-pr-
-            # metadata-action's `branch` ref type only checks that github.ref matches
-            # refs/heads/*, with no event-name gating -- merge_group's temporary
-            # gh-readonly-queue/... ref matches that too, so without disabling it here this
-            # rule would additionally tag every merge_group build with a second, un-swept
-            # tag derived from that throwaway ref name.
-            type=ref,event=branch,prefix=${{ inputs.tag }}-,enable=${{ github.event_name != 'merge_group' }}
-            type=match,pattern=${{ inputs.release_pattern }},group=1,prefix=${{ inputs.tag }}-
-            # metadata-action has no dedicated `event=merge_group` ref type, so this is spelled
-            # out by hand; it must match ghci.yaml's `suffix` job exactly (-mg-<full sha>), or
-            # the two workflows disagree on what tag the merge job just published.
-            type=raw,value=${{ inputs.tag }}-mg-${{ github.sha }},enable=${{ github.event_name == 'merge_group' }}
+            type=raw,value=${{ inputs.tag }}${{ inputs.tag_suffix }}
           labels: |
             org.opencontainers.image.title=${{ inputs.tag }}
             org.opencontainers.image.description=${{ inputs.description }}
