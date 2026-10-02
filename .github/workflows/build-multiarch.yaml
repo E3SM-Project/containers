@@ -49,6 +49,9 @@ on:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+  # BuildKit's registry cache lives in its own package, so its tags don't bury the ones people
+  # pull on the image's package page.
+  CACHE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}-buildcache
   # A fork PR gets no packages:write, so nothing can be pushed and there is nothing to merge:
   # it still builds every stage, as validation, FROM the images main published. merge_group
   # runs are not excluded here: they publish too (under an ephemeral -mg-<sha> tag, see the
@@ -73,7 +76,9 @@ jobs:
       # github.repository_owner is mixed case (E3SM-Project) and image refs must be
       # lowercase. metadata-action does this itself; a raw buildx ref does not.
       - name: Lowercase image ref
-        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+        run: |
+          echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+          echo "CACHE=${CACHE,,}" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -122,8 +127,8 @@ jobs:
           # and isn't branch-scoped, so PRs and main naturally share it. Skipped on cache-to for fork
           # PRs, which can't push; they still read whatever main last published.
           #
-          # cache-to only ever writes this run's own buildcache-<tag><tag_suffix>-<arch> tag, never
-          # the plain buildcache-<tag>-<arch> one main and every other PR reads from: a PR (or
+          # cache-to only ever writes this run's own <tag><tag_suffix>-<arch> tag, never the plain
+          # <tag>-<arch> one main and every other PR reads from: a PR (or
           # merge_group run) that touches this stage's Dockerfile would otherwise overwrite the
           # shared cache with its own not-yet-reviewed content, forcing every unrelated concurrent
           # PR (and main itself, if this PR never merges) into a cold rebuild the next time they
@@ -134,9 +139,9 @@ jobs:
           # buildx logs and skips, not a build failure. tag_suffix is empty on a push to main, so
           # both cache-from lines and cache-to collapse onto the one plain tag, same as before.
           cache-from: |
-            type=registry,ref=${{ env.IMAGE }}:buildcache-${{ inputs.tag }}${{ inputs.tag_suffix }}-${{ matrix.arch }}
-            ${{ inputs.tag_suffix != '' && format('type=registry,ref={0}:buildcache-{1}-{2}', env.IMAGE, inputs.tag, matrix.arch) || '' }}
-          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache-{1}{2}-{3},mode=max,ignore-error=true', env.IMAGE, inputs.tag, inputs.tag_suffix, matrix.arch) || '' }}
+            type=registry,ref=${{ env.CACHE }}:${{ inputs.tag }}${{ inputs.tag_suffix }}-${{ matrix.arch }}
+            ${{ inputs.tag_suffix != '' && format('type=registry,ref={0}:{1}-{2}', env.CACHE, inputs.tag, matrix.arch) || '' }}
+          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:{1}{2}-{3},mode=max,ignore-error=true', env.CACHE, inputs.tag, inputs.tag_suffix, matrix.arch) || '' }}
       - name: Export digest
         if: env.PUSH == 'true'
         run: |
