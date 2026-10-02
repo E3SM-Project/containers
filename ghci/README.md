@@ -54,7 +54,7 @@ in `/etc/e3sm/image.env` inside the image.
 Every env image also carries `less`, `nano`, `screen` and `zip`, so a shell in the image
 the tests run in is usable for debugging.
 
-The x86_64 images target `x86_64_v3` (AVX2: Intel Haswell / AMD Zen and newer), which is
+The x86_64 images target `x86_64_v3` (AVX2: Intel Haswell / AMD Excavator and newer), which is
 what the binary cache below is built for; the aarch64 images are fully generic.
 
 To pull a specific arch on a host of the other arch (under emulation), ask for the

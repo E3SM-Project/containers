@@ -3,6 +3,36 @@
 Container recipes for the E3SM project. Each top-level directory is one family of images,
 built and published to GHCR by the matching workflow in `.github/workflows/`.
 
+These images are software environments for building and running E3SM: compilers, MPI, the
+I/O libraries and Python stack E3SM needs. They do not contain E3SM itself (its source or
+executables) or any input data; check out E3SM and mount your data into the container.
+
+## Which image do I want?
+
+All are `ghcr.io/e3sm-project/e3sm-image:<tag>`, one multi-arch tag per image:
+
+| Tag                  | Arches          | Toolchain                     | Use it for |
+|----------------------|-----------------|-------------------------------|------------|
+| `gnu13-openmpi4`     | x86_64, aarch64 | GCC 13, Open MPI 4            | CPU builds and tests; the default choice, including on Apple Silicon |
+| `gnu13-mpich4-cuda`  | x86_64, aarch64 | GCC 13, MPICH 4, CUDA         | NVIDIA GPU builds (CUDA 12.4 on x86_64, 13.0 on aarch64) |
+| `intel2024-openmpi4` | x86_64          | oneAPI 2024.1, Open MPI 4, MKL | CPU builds with the Intel compilers |
+| `<tag>-dev`          | as above        | as above                      | Working inside the container: debuggers, ninja, ccache, coding agents |
+
+```bash
+podman run --rm -it ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
+```
+
+- **CPU:** the x86_64 images need an **x86-64-v3** CPU (AVX2: Intel Haswell / AMD Excavator or
+  newer). The aarch64 images are generic.
+- **GPU:** the CUDA images carry the CUDA toolkit, not the driver; that comes from the host.
+  CUDA 12.4 needs driver 550 or newer (525 with CUDA minor-version compatibility), CUDA 13.0
+  needs 580 or newer.
+
+How to run them (podman, docker, Apptainer, Dev Containers), what is in them, and how they
+are built: [`ghci/README.md`](ghci/README.md).
+
+## Images
+
 | Directory                                        | Image                                                  | What it is |
 |--------------------------------------------------|--------------------------------------------------------|------------|
 | [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-image`                      | Spack/UBI9 development and testing environments (`gnu13-openmpi4`, `gnu13-mpich4-cuda`, `intel2024-openmpi4`, and a `-dev` variant of each). **Start here.** |
@@ -28,9 +58,9 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
   owned by root.
 - **Runs under Apptainer too.** HPC users pull the same images with
   `apptainer pull docker://...`; the differences (host user, read-only image, login shell,
-  MPI across nodes, GPUs) and what CI checks are in [`ghci/readme`](ghci/readme).
+  MPI across nodes, GPUs) and what CI checks are in [`ghci/README.md`](ghci/README.md).
 - **Prebuilt where possible.** Spack stacks reuse binaries from the E4S build cache and
-  build only what it does not have; see [`ghci/readme`](ghci/readme).
+  build only what it does not have; see [`ghci/README.md`](ghci/README.md).
 - **Path-scoped builds.** The ghci workflow always reports its required check, but filters
   changes inside the workflow so unrelated edits skip the expensive builds.
 
@@ -38,7 +68,7 @@ Pull requests from forks cannot push to GHCR (`GITHUB_TOKEN` has no `packages: w
 there), so those runs build every stage as validation only, the `-dev` images FROM the env
 image `main` published rather than the one the same run just built.
 
-See [contributing](contributing) to add a new image.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to add a new image.
 
 CI runs shell/workflow lint before building, then checks the published env images and
 uploads per-architecture size reports.
