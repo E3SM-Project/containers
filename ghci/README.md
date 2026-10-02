@@ -299,6 +299,14 @@ pip install <package-name>
 
 They persist for the life of the container, which is disposable by design.
 
+`mpi4py` is built from source against the image's MPI, so it uses the same `mpirun` and
+library as the compiled code. `netCDF4` is the PyPI wheel, which carries its own serial
+copies of netCDF-C and HDF5 (`netCDF4.__netcdf4libversion__`,
+`netCDF4.__hdf5libversion__`) rather than using spack's; that is fine for reading and
+writing files -- the smoke test checks it reads what the spack stack writes -- but it has
+no parallel I/O. For that, build it against spack's libraries (not tested by CI):
+`HDF5_DIR=$HDF5_ROOT NETCDF4_DIR=$NETCDF_C_ROOT pip install --no-binary netCDF4 netCDF4`.
+
 ## Manually rebuilding the stack
 
 To test a different compiler or library version, rebuild locally. Each image builds for the
@@ -402,16 +410,18 @@ anywhere.
 
 For same-repository PRs, CI tests every published env/platform combination as the non-root
 user (and `gnu13-openmpi4` on x86_64 again under Apptainer, see above): login environment,
-commands run without a login shell (through `e3sm-env`), writable venv, Python dependency consistency, NetCDF round-trip,
-Torch flavor, a two-rank MPI C program, and a Fortran executable. The `-dev` images get the
+commands run without a login shell (through `e3sm-env`), writable venv, Python dependency
+consistency, NetCDF round-trip, Torch flavor, two-rank MPI programs in C, Fortran and
+Python (`mpi4py`, checked to be linked against the image's MPI), Python `netCDF4` reading
+files the spack stack wrote, and parallel netCDF/PnetCDF I/O. The `-dev` images get the
 same checks plus their own (`ghci/tests/smoke-dev.sh`): the dev tools and agents on PATH,
 and the ownership of the dirs a dev container mounts onto. Each smoke job uploads an
 `image-size-<tag>-<arch>` artifact with exact bytes, image ID, and layer commands, and the
 run's summary page has one table of every image's compressed and expanded size.
 
 `ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (git
-in a checkout owned by another uid, a Dev Containers uid remap). CI does not smoke-test the `-dev` images yet, so it is not run
-there; run it by hand as its header shows.
+in a checkout owned by another uid, a Dev Containers uid remap). CI does not smoke-test
+the `-dev` images yet, so it is not run there; run it by hand as its header shows.
 
 The ARM CUDA image currently has one verified upstream packaging defect:
 `nvidia-cusparselt-cu13==0.8.1` has an `aarch64` wheel filename but an internal
