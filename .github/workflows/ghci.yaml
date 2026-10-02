@@ -245,6 +245,7 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      VARIANT: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -256,7 +257,7 @@ jobs:
         run: |
           echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
           docker pull "${IMAGE,,}"
-          python3 scripts/image-size.py "${IMAGE,,}" --json > image-size.json
+          python3 scripts/image-size.py "${IMAGE,,}" --json --variant "$VARIANT" --kind env > image-size.json
           python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
       - name: Test login environment, Python, NetCDF, and MPI
         run: |
@@ -298,6 +299,7 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      VARIANT: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -309,7 +311,7 @@ jobs:
         run: |
           echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
           docker pull "${IMAGE,,}"
-          python3 scripts/image-size.py "${IMAGE,,}" --json > image-size.json
+          python3 scripts/image-size.py "${IMAGE,,}" --json --variant "$VARIANT" --kind dev > image-size.json
           python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
       - name: Test the env through the dev layer, and the dev tools
         run: |
@@ -323,6 +325,31 @@ jobs:
           path: image-size.json
           if-no-files-found: warn
           retention-days: 30
+
+  # One table for the run's summary page, covering every env and dev image smoke measured:
+  # the baseline to slim against, and the place to notice an image growing.
+  sizes:
+    needs: [smoke, smoke-dev]
+    if: ${{ !cancelled() && (needs.smoke.result != 'skipped' || needs['smoke-dev'].result != 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: image-size-*
+          path: sizes
+      - name: Size table
+        run: |
+          shopt -s nullglob
+          reports=(sizes/*/image-size.json)
+          if [ "${#reports[@]}" -gt 0 ]; then
+            python3 scripts/image-size.py --table "${reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # The images are run with Apptainer on HPC systems, where the user, the login shell, a
   # read-only filesystem and the host environment all differ from docker. Pull the published
