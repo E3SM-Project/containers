@@ -120,8 +120,38 @@ RUN mkdir -p /home/${E3SM_USER}/.cache/ccache \
     chown -R ${E3SM_USER}:${E3SM_USER} /home/${E3SM_USER}
 
 # A bind-mounted repo is owned by the host's uid, which need not be ours; without this git
-# refuses to operate on it ("dubious ownership"). Normal for a dev container.
-RUN git config --system --add safe.directory '*'
+# refuses to operate on it ("dubious ownership"). Trust that only where checkouts are meant
+# to go, not everywhere ('*'): git >= 2.46 (UBI9 has 2.52) reads a trailing /* as "anything
+# under this path", which covers the checkout and every nested submodule, each of which git
+# checks separately. ~/work is a symlink to it, and git compares the resolved path. A
+# checkout elsewhere needs its own `git config --global --add safe.directory <path>`.
+RUN git config --system --add safe.directory '/projects/e3sm/work/*'
+
+# On a Linux host whose uid is not 1000, Dev Containers' updateRemoteUserUID gives e3sm the
+# host user's uid/gid, but only re-owns $HOME: the venv and the /projects/e3sm dirs stay
+# uid 1000, so `pip install` and creating anything next to the checkout fail.
+# e3sm-fix-ownership hands them to whoever runs it; the devcontainer example calls it from
+# postCreateCommand. Not done unconditionally (or by moving the venv into $HOME, which the
+# remap would then re-own): re-owning the venv copies all of it, 1-6 GB, into the
+# container's writable layer. With uid 1000 (macOS, Windows, most single-user Linux hosts)
+# nothing needs changing and it returns at once. It checks every file in the venv, not just
+# the top dir, so a run that was interrupted is finished by the next one. Only the dirs
+# themselves under /projects/e3sm, never what is in data/ and work/: those are the user's
+# bind mounts.
+RUN printf '%s\n' \
+      '#!/bin/bash' \
+      'set -euo pipefail' \
+      'uid=$(id -u) gid=$(id -g)' \
+      'venv=/projects/e3sm/software/eamxx-venv' \
+      'dirs=(/projects/e3sm /projects/e3sm/software /projects/e3sm/data /projects/e3sm/work)' \
+      'if [ -z "$(find "${dirs[@]}" -maxdepth 0 ! -uid "$uid" -print -quit)" ] &&' \
+      '   [ -z "$(find "$venv" ! -uid "$uid" -print -quit)" ]; then' \
+      '    exit 0' \
+      'fi' \
+      'echo "e3sm-fix-ownership: handing $venv and /projects/e3sm to uid $uid (once per container; can take a minute)" >&2' \
+      'sudo chown "$uid:$gid" "${dirs[@]}"' \
+      'sudo chown -R -h "$uid:$gid" "$venv"' > /usr/local/bin/e3sm-fix-ownership && \
+    chmod 0755 /usr/local/bin/e3sm-fix-ownership
 
 # Where the per-user installers below put their binaries
 RUN printf '%s\n' \
@@ -141,5 +171,7 @@ RUN set -o pipefail && curl -fsSL https://gh.io/copilot-install | bash
 
 WORKDIR /projects/e3sm/work
 
-ENTRYPOINT []
+# The env image's entrypoint and default command (see there). Setting ENTRYPOINT resets the
+# inherited CMD, so both are spelled out rather than half-inherited.
+ENTRYPOINT [ "/usr/local/bin/e3sm-env" ]
 CMD [ "/bin/bash", "--login" ]

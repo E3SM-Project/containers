@@ -106,7 +106,8 @@ RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
 RUN git config --system url."https://github.com/".insteadOf git@github.com:
 
 # Run a command with the full login environment (modules, SPACK_ARCH, venv) from a context
-# that does not get one: `e3sm-env cmake --version`.
+# that does not get one: `e3sm-env cmake --version`. It is also the image's ENTRYPOINT (see
+# the end), so `docker run IMAGE cmake --version` goes through it too.
 RUN printf '%s\n' '#!/bin/bash -l' 'exec "$@"' > /usr/local/bin/e3sm-env && \
     chmod 0755 /usr/local/bin/e3sm-env
 
@@ -374,6 +375,12 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
 # before the venv exists, still works.
 # cupy comes as the prebuilt wheel for the CUDA major version (cupy-cuda12x/13x), never the
 # plain "cupy" sdist, which compiled from source for ~25 min; --only-binary keeps it that way.
+# mpi4py goes the other way: --no-binary builds it with the mpicc loaded above, so it links
+# this image's MPI. PyPI's mpi4py wheels instead dlopen whichever libmpi they find at import
+# time (LD_LIBRARY_PATH, other packages in the venv), so nothing ties them to this one.
+# netCDF4 stays the wheel, which bundles its own serial netCDF-C/HDF5: fine for reading and
+# writing files, and the smoke test checks it reads what the spack stack writes. Parallel
+# I/O from Python would need it built against spack's netcdf-c instead.
 RUN . /etc/profile && echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
 USER ${E3SM_USER}
@@ -382,7 +389,7 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     python3 -m venv /projects/e3sm/software/eamxx-venv && \
     source /projects/e3sm/software/eamxx-venv/bin/activate && \
     python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
+    python3 -m pip install --no-cache-dir --no-binary=mpi4py \
         pyyaml pylint netCDF4 psutil pybind11 mpi4py packaging xarray numpy && \
     if [ -n "${E3SM_CUPY_PKG}" ]; then \
       python3 -m pip install --no-cache-dir --only-binary=:all: "${E3SM_CUPY_PKG}"; \
@@ -391,6 +398,17 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
 
 WORKDIR ${HOME}
 
-ENTRYPOINT []
-# --login, so /etc/profile.d (SPACK_ARCH, the compiler, modules, the venv) applies
+# Every command the container is started with runs through e3sm-env, so `docker run IMAGE
+# cmake --version`, `apptainer run IMAGE <cmd>`, batch launchers and anything else that hands
+# the image a command get the same environment as a login shell. It execs the command, so
+# signals and the exit status are the command's own. `docker exec` and `apptainer exec` never
+# use the entrypoint: there it is `bash -l` or `e3sm-env <cmd>`, as before.
+# With the default CMD, and with `docker run IMAGE bash -l ...`, this logs in twice. That is
+# safe to repeat: lmod's `module purge` undoes the outer loads before loading them again,
+# and the venv is activated again so it stays ahead of the python module on PATH (skipping
+# that because VIRTUAL_ENV is already set would leave spack's python3 first). What is left
+# over is a few duplicate PATH entries, in the right order.
+ENTRYPOINT [ "/usr/local/bin/e3sm-env" ]
+# Still --login: an interactive shell also wants what profile.d sets up but does not export
+# (the history key bindings; the -dev prompt and completion).
 CMD [ "/bin/bash", "--login" ]
