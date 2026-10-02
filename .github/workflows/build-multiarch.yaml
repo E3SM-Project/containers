@@ -99,7 +99,7 @@ jobs:
       # the config changes per commit; the cached layers are unaffected.
       - name: Labels
         id: labels
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           labels: |
