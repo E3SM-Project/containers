@@ -1,8 +1,9 @@
 name: ghci
 
 on:
+  # No branch filter: a PR stacked on another PR's branch needs the same build and smoke
+  # checks as one into main, or it reaches main untested once the PR below it merges.
   pull_request:
-    branches: [ main ]
     types: [opened, synchronize, ready_for_review, reopened]
   push:
     branches: [ main ]
