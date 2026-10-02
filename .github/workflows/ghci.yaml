@@ -126,8 +126,8 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
 
   # The variant list: one context (ghci/env), one set of build args per env. Each env is a
-  # single self-contained build: spack pulls whatever it can from the E4S binary cache (see
-  # ghci/env/spack-configuration/mirrors.yaml) and builds only the rest.
+  # single self-contained build: spack pulls whatever it can from our own and the E4S binary
+  # caches (see ghci/env/spack-configuration/mirrors.yaml) and builds only the rest.
   env:
     needs: [changes, suffix, lint]
     if: needs.changes.outputs.relevant == 'true'
@@ -293,6 +293,105 @@ jobs:
           apptainer --version
       - name: Test under Apptainer
         run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
+
+  # Publish what the env builds compiled to our own Spack binary cache on GHCR (the `e3sm`
+  # mirror in ghci/env/spack-configuration/mirrors.yaml), so rebuilds, new variants and the
+  # image split stop paying for source builds. Every installed package is pushed from the
+  # image that just passed its smoke test, and the ones already in the cache are skipped, so a
+  # rebuild only uploads what is new.
+  #
+  # Only on events a maintainer controls, never on a PR or a merge_group run: a push to main,
+  # a ghci-* tag, or a manual dispatch (which needs write access, and may name any branch so
+  # the push path can be exercised before a change merges). merge_group is left out on
+  # purpose: it builds the same tree the push to main that follows it does, so it would only
+  # make the queue wait for a duplicate upload. The cache is keyed by spec hash, and with
+  # `reuse: true` the concretizer prefers what it finds there, so whatever reaches the cache
+  # shapes every later build's solution, not just its build time. Nor does it run on a fork,
+  # which has no write access to e3sm-project's packages.
+  #
+  # Deliberately NOT in `required-check`: a cache push is an optimization, not a validation
+  # of the change, so a GHCR hiccup or a slow first upload shows up as a red job but must not
+  # block the merge queue.
+  buildcache:
+    needs: [suffix, env, smoke]
+    if: >-
+      needs.env.result == 'success' && needs.smoke.result == 'success' &&
+      github.repository_owner == 'E3SM-Project' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: gnu-cpu-env
+            arch: x86_64
+          - env: gnu-cpu-env
+            arch: aarch64
+          - env: gnu-cuda-env
+            arch: x86_64
+          - env: gnu-cuda-env
+            arch: aarch64
+          - env: intel-cpu-env
+            arch: x86_64
+    name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Any runner of this arch will do: the packages pushed are the ones installed inside the
+      # published image, which is pulled here, not anything left on the runner that built it.
+      # Run as root: the spack caches under /spack-cache belong to it. The push credentials
+      # are added to the throwaway container's config, never to the image. spack quietly
+      # leaves out packages whose recipe forbids binary redistribution (the oneAPI compilers,
+      # MKL); the cache is public, so pushing them with --private is not an option.
+      - name: Push installed packages to the buildcache
+        run: |
+          docker pull "${IMAGE,,}"
+          docker run --rm --user root -e GHCR_USER -e GHCR_TOKEN "${IMAGE,,}" bash -euo pipefail -c '
+            spack mirror set --scope system --push \
+              --oci-username-variable GHCR_USER --oci-password-variable GHCR_TOKEN e3sm
+            spack buildcache push --only package e3sm $(spack find --format "/{hash}")
+          '
+
+  # One index update after all the pushes, not one per push: concurrent updates would each
+  # overwrite the index with only what they saw, and spack installs only what the index lists.
+  # It only talks to the registry, so it runs a spack cloned on the runner (at the version the
+  # images are built with) rather than pulling an image.
+  buildcache-index:
+    needs: buildcache
+    if: needs.buildcache.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: buildcache-index
+      cancel-in-progress: false
+    env:
+      GHCR_USER: ${{ github.actor }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Update the buildcache index
+        run: |
+          spack_ver="$(sed -n 's/^ARG SPACK_VER=//p' ghci/env/Dockerfile)"
+          git clone --depth 1 --branch "$spack_ver" https://github.com/spack/spack.git "$RUNNER_TEMP/spack"
+          export PATH="$RUNNER_TEMP/spack/bin:$PATH"
+          url="oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/e3sm-spack-buildcache"
+          spack mirror add --unsigned \
+            --oci-username-variable GHCR_USER --oci-password-variable GHCR_TOKEN e3sm "$url"
+          spack buildcache update-index e3sm
 
   # The one job to mark as a required status check / merge-queue check. It always runs
   # (`if: always()`) and only fails if a needed job actually failed or was cancelled -- a
