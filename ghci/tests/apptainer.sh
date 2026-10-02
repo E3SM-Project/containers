@@ -38,12 +38,19 @@ step "image environment survives --cleanenv"
 test "$(run printenv E3SM_USER)" = e3sm
 test "$(run printenv COMPILER)" = "$(run bash -lc 'echo "$COMPILER"')"
 
-step "login activation: bash -l, e3sm-env and the runscript (CMD: bash --login)"
+step "login activation: bash -l, e3sm-env and the runscript (ENTRYPOINT e3sm-env, CMD bash --login)"
 test -n "$(run bash -lc 'echo "$SPACK_ARCH"')" || fail "bash -l did not source /etc/profile.d"
 run e3sm-env mpicc --version >/dev/null
 # shellcheck disable=SC2016  # the login shell inside the container expands these
 out=$(echo 'echo "arch=$SPACK_ARCH"; command -v mpirun' | apptainer run --cleanenv "$image")
 grep -q '^arch=linux-rhel9-' <<<"$out" || fail "apptainer run did not give a login shell: $out"
+
+step "apptainer run IMAGE CMD: the command runs through the ENTRYPOINT (e3sm-env)"
+apptainer run --cleanenv "$image" cmake --version >/dev/null || fail "apptainer run cmake: no login environment"
+out=$(apptainer run --cleanenv "$image" python3 -c 'import sys; print(sys.prefix)')
+test "$out" = /projects/e3sm/software/eamxx-venv || fail "apptainer run python3 is $out, not the venv"
+out=$(apptainer run --cleanenv "$image" printf '%s\n' 'a b' c)
+test "$out" = $'a b\nc' || fail "apptainer run did not preserve the arguments: $out"
 
 step "read-only image: writes fail, --writable-tmpfs and --overlay make them work"
 if run bash -c 'touch /projects/e3sm/data/probe' 2>/dev/null; then

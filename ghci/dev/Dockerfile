@@ -136,5 +136,7 @@ RUN set -o pipefail && curl -fsSL https://gh.io/copilot-install | bash
 
 WORKDIR /projects/e3sm/work
 
-ENTRYPOINT []
+# The env image's entrypoint and default command (see there). Setting ENTRYPOINT resets the
+# inherited CMD, so both are spelled out rather than half-inherited.
+ENTRYPOINT [ "/usr/local/bin/e3sm-env" ]
 CMD [ "/bin/bash", "--login" ]
