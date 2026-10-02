@@ -5,7 +5,7 @@ built and published to GHCR by the matching workflow in `.github/workflows/`.
 
 | Directory                                        | Image                                                  | What it is |
 |--------------------------------------------------|--------------------------------------------------------|------------|
-| [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-ghci`                       | Spack/UBI9 development and testing environments (`gnu-cpu-env`, `gnu-cuda-env`, `intel-cpu-env`, and a `-dev` variant of each). **Start here.** |
+| [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-image`                      | Spack/UBI9 development and testing environments (`gnu13-openmpi4`, `gnu13-mpich4-cuda`, `intel2024-openmpi4`, and a `-dev` variant of each). **Start here.** |
 
 ## Conventions
 
@@ -42,3 +42,18 @@ See [contributing](contributing) to add a new image.
 
 CI runs shell/workflow lint before building, then checks the published env images and
 uploads per-architecture size reports.
+
+## Deprecated names
+
+The images used to be published as `ghcr.io/e3sm-project/e3sm-ghci:<tag>`. Those tags are
+still published, as aliases of exactly the same images (same digests), so nothing that pulls
+them breaks; move to the new names, as the old ones will be removed once E3SM's own workflows
+have switched.
+
+| Old (`e3sm-ghci:`)  | New (`e3sm-image:`)       |
+|---------------------|---------------------------|
+| `gnu-cpu-env`       | `gnu13-openmpi4`          |
+| `gnu-cuda-env`      | `gnu13-mpich4-cuda`       |
+| `intel-cpu-env`     | `intel2024-openmpi4`      |
+| `<old>-dev`         | `<new>-dev`               |
+| `<old>-<version>`   | `<new>-<version>`         |
