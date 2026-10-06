@@ -100,10 +100,16 @@ RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
     echo '  bind "\"\\e[B\": history-search-forward"' >> /etc/profile.d/eamxx-env.sh && \
     echo 'fi' >> /etc/profile.d/eamxx-env.sh
 
-# System-wide rather than a `git config --global` run from profile.d, so it also applies to
-# non-login shells: devcontainer lifecycle hooks and anything under `sh -c` never source
-# /etc/profile.d, and E3SM's submodules use git@ URLs.
-RUN git config --system url."https://github.com/".insteadOf git@github.com:
+# Do NOT use `git config --system` here: it writes /etc/gitconfig, which is read by every git
+# process in the container, including CI runners, and it breaks actions/checkout
+# (E3SM submodules use git@ URLs; checkout does its own rewrite to https).
+# Users can source this file if they REALLY want this setting.
+# For devcontainer lifecycle hooks, set it in devcontainer.json
+# "remoteEnv" instead: GIT_CONFIG_COUNT=1, GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf,
+# GIT_CONFIG_VALUE_0=git@github.com: (if adding more git settings that way, bump GIT_CONFIG_COUNT).
+RUN mkdir -p /opt/share && \
+    echo "git config --global url.\"https://github.com/\".insteadOf git@github.com: 2>/dev/null || true" \
+    > /opt/share/gitconfig.sh
 
 # Run a command with the full login environment (modules, SPACK_ARCH, venv) from a context
 # that does not get one: `e3sm-env cmake --version`.

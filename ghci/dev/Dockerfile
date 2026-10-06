@@ -103,11 +103,6 @@ RUN mkdir -p /projects/e3sm/work && \
     chown -R ${E3SM_USER}:${E3SM_USER} /projects/e3sm/work && \
     ln -sfn /projects/e3sm/work /home/${E3SM_USER}/work
 
-# The base image rewrites git@github.com: -> https:// so CI can fetch submodules
-# anonymously. Here that would override an SSH remote and force an HTTPS credential prompt
-# instead of using the ssh-agent a dev container forwards, so drop it.
-RUN git config --system --unset-all url."https://github.com/".insteadOf
-
 # Pre-create the dirs a dev container typically mounts volumes onto. A named volume
 # mounted at a path that does NOT exist in the image is created root-owned, and then the
 # non-root user cannot write to it.
