@@ -297,9 +297,10 @@ compiler, then the spack stack in chunks, then the python venv.
 from `/etc/profile.d/gcc-toolset.sh`. Intel oneAPI is installed by spack (a download, not a
 build) and loaded as an lmod module.
 
-**The binary cache.** Spack is configured (`ghci/env/spack-configuration/`) to reuse
-prebuilt binaries from the [E4S](https://oaciss.uoregon.edu/e4s/inventory.html) build
-cache, `https://cache.e4s.io/26.06`. Its rocky9 stack matches UBI9 (same glibc, 2.34) and
+**The binary caches.** Spack is configured (`ghci/env/spack-configuration/`) to reuse
+prebuilt binaries from two caches. The first is our own, on GHCR (see below). The second is
+the [E4S](https://oaciss.uoregon.edu/e4s/inventory.html) build cache,
+`https://cache.e4s.io/26.06`. Its rocky9 stack matches UBI9 (same glibc, 2.34) and
 is built with `gcc-toolset-13`, so with gcc 13.3.1 most of the tree -- cmake, python,
 boost, yaml-cpp, and nearly every dependency -- is downloaded in seconds instead of built.
 Whatever the cache does not have (a version, variant or compiler it was not built with) is
@@ -307,6 +308,25 @@ built from source exactly as before; the cache never changes *what* gets install
 how long it takes. In the default gnu-cpu-env, what still builds is openmpi 4 (E4S only has
 openmpi 5) and the MPI-dependent I/O libraries and MOAB (E4S builds those against
 its own external mpich). gdb and valgrind come from RHEL.
+
+Our own cache, `oci://ghcr.io/e3sm-project/e3sm-spack-buildcache`, holds what E4S does not
+have: openmpi 4, the MPI-dependent I/O libraries and MOAB, and what is built with the oneAPI
+compilers. Packages whose recipe forbids binary redistribution, such as the oneAPI compilers
+and MKL themselves, are not pushed (the cache is public); spack downloads those rather than
+building them, so this costs little.
+The `buildcache` job in `.github/workflows/ghci.yaml` pushes every package installed in an
+env image to it, per arch, once that image has passed its smoke tests, then the
+`buildcache-index` job refreshes the index (spack only installs what the index lists).
+Packages already in the cache are skipped, so a rebuild uploads only what is new. Only pushes
+to `main`, `ghci-*` tags and manual runs (which need write access, and can name any branch)
+publish; PRs and merge-queue runs only read the cache, so an unreviewed change never puts a
+binary there. Since the concretizer prefers what is in the cache, what gets pushed also shapes
+later builds' solutions. The two jobs are not part of `required-check`: a failed push is a red
+job, not a blocked merge. Binaries are unsigned
+(OCI mirrors are not signed by spack) and read anonymously, so the `e3sm-spack-buildcache`
+package must be public: after the first publish, set its visibility in the package settings on
+GitHub. To use it outside these images, `spack mirror add --unsigned e3sm
+oci://ghcr.io/e3sm-project/e3sm-spack-buildcache` on rocky9/RHEL9 with spack 1.x.
 
 The package recipes are pinned to the same release the cache was built from
 (`repos.yaml`), so the two move together: to bump, change the spack version in the
