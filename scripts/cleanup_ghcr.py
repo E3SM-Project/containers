@@ -22,8 +22,8 @@ from datetime import datetime, timezone
 PACKAGES = [
     "e3sm-image",
     "e3sm-image-buildcache",  # BuildKit registry cache (build-multiarch.yaml's CACHE)
-    # The old names: e3sm-ghci still gets the deprecated alias tags, and both hold PR, merge
-    # queue and cache tags from before the rename that still need to age out.
+    # The old names, no longer published to: their PR, merge queue and cache tags from before
+    # the rename still need to age out.
     "e3sm-ghci",
     "e3sm-ghci-buildcache",
 ]

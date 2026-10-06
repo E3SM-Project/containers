@@ -218,7 +218,6 @@ jobs:
       matrix:
         include: &variants
           - env: gnu13-openmpi4
-            legacy: gnu-cpu-env
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
@@ -230,7 +229,6 @@ jobs:
               WITH_MOAB=yes
           # -cuda without a version: 12.4 on x86_64, 13.0 on aarch64 (see ghci/README.md)
           - env: gnu13-mpich4-cuda
-            legacy: gnu-cuda-env
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
@@ -242,7 +240,6 @@ jobs:
               WITH_MOAB=yes
           # Intel oneAPI ships for x86_64 only
           - env: intel2024-openmpi4
-            legacy: intel-cpu-env
             arches: '["x86_64"]'
             args: |
               COMPILER=intel-oneapi-compilers
@@ -443,11 +440,9 @@ jobs:
         run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
 
   # Publish the tags people pull (gnu13-openmpi4, ..., gnu13-openmpi4-<version> for a ghci-*
-  # tag) only by retagging the exact multi-arch images that were tested, never by a build. The
-  # same images also get their old e3sm-ghci names (gnu-cpu-env, ...), so existing consumers
-  # keep working while they move to the new ones (see "Deprecated names" in README.md). On a push
-  # to main those are the merge queue's -mg-<sha> images; otherwise this run's own -rc-<run_id>
-  # images, and only once every test of them passed. A failed test therefore leaves the
+  # tag) only by retagging the exact multi-arch images that were tested, never by a build. On a
+  # push to main those are the merge queue's -mg-<sha> images; otherwise this run's own
+  # -rc-<run_id> images, and only once every test of them passed. A failed test therefore leaves the
   # previous tag where it was.
   #
   # imagetools create from a single index with nothing to change re-pushes that same index, so
@@ -480,9 +475,6 @@ jobs:
       - name: Retag the tested images
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image
-          # DEPRECATED: the old package and tag names, kept as aliases until consumers move.
-          LEGACY_IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
-          LEGACY: ${{ matrix.legacy }}
           VARIANT: ${{ matrix.env }}
           FROM: ${{ needs.suffix.outputs.value }}
           TO: ${{ needs.suffix.outputs.release_suffix }}
@@ -490,7 +482,6 @@ jobs:
           # IMAGE comes from env above; image is its lowercase form
           # shellcheck disable=SC2153
           image="${IMAGE,,}"
-          legacy_image="${LEGACY_IMAGE,,}"
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
           promoted=0
           for kind in "" -dev; do
@@ -502,15 +493,13 @@ jobs:
               continue
             fi
             tested=$(digest "$image:$tag$FROM")
-            for dest in "$image:$tag$TO" "$legacy_image:$LEGACY$kind$TO"; do
-              docker buildx imagetools create -t "$dest" "$image:$tag$FROM"
-              published=$(digest "$dest")
-              echo "$dest = $published (tested as $tag$FROM = $tested)"
-              if [ "$published" != "$tested" ]; then
-                echo "::error::$dest is $published, not the tested $tested"
-                exit 1
-              fi
-            done
+            docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
+            published=$(digest "$image:$tag$TO")
+            echo "$tag$TO = $published (tested as $tag$FROM = $tested)"
+            if [ "$published" != "$tested" ]; then
+              echo "::error::$tag$TO is $published, not the tested $tested"
+              exit 1
+            fi
             promoted=$((promoted + 1))
           done
           if [ "$promoted" -eq 0 ]; then

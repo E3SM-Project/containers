@@ -73,12 +73,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) to add a new image.
 CI runs shell/workflow lint before building, then checks the published env images and
 uploads per-architecture size reports.
 
-## Deprecated names
+## Old names
 
-The images used to be published as `ghcr.io/e3sm-project/e3sm-ghci:<tag>`. Those tags are
-still published, as aliases of exactly the same images (same digests), so nothing that pulls
-them breaks; move to the new names, as the old ones will be removed once E3SM's own workflows
-have switched.
+The images used to be published as `ghcr.io/e3sm-project/e3sm-ghci:<tag>`. Those tags are no
+longer updated; switch to the new names:
 
 | Old (`e3sm-ghci:`)  | New (`e3sm-image:`)       |
 |---------------------|---------------------------|
