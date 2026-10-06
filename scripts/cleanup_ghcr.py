@@ -27,9 +27,11 @@ PACKAGES = [
 # BuildKit cache tags carry a trailing arch (<tag>-pr-<N>-<arch>), image tags do not.
 ARCH = r"(?:-(?:x86_64|aarch64))?"
 PR_TAG = re.compile(rf"-pr-\d+{ARCH}$")
-# merge_group runs publish under <tag>-mg-<sha> (see ghci.yaml's `suffix` job). There is no
-# single PR to delete them on (a merge_group run can batch several PRs), so they age out instead.
-STAGING_TAG = re.compile(rf"-mg-[0-9a-f]{{40}}{ARCH}$")
+# CI's staging tags (see ghci.yaml's `suffix` job): merge_group runs publish under
+# <tag>-mg-<sha>, and tags, dispatches and untested pushes to main under <tag>-rc-<run_id>
+# before `promote` retags what passed. There is no single PR to delete them on (a merge_group
+# run can batch several PRs), so they age out instead.
+STAGING_TAG = re.compile(rf"-(?:mg-[0-9a-f]{{40}}|rc-\d+){ARCH}$")
 
 
 def tags(version):
@@ -48,7 +50,7 @@ def closed_pr_versions(versions, pr):
 
 
 def is_stale_staging(version):
-    """Tagged only with CI staging tags: at least one -mg-, and any others -mg- or -pr-.
+    """Tagged only with CI staging tags: at least one -mg-/-rc-, and any others staging or -pr-.
 
     A merge_group build can be byte-identical to a pull_request build, so GHCR puts both tags
     on one version; without accepting -pr- next to -mg- that version would never be deleted. A

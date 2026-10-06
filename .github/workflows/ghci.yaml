@@ -35,6 +35,11 @@ jobs:
   # workflow or not also for merge_group events. Two exceptions for which we ALWAYS run:
   #  - workflow_dispatch: is a deliberate manual request, so we assume we want to run
   #  - ref_type=='tag': if we push a tag, we want to ensure it is working, so run all tests
+  #
+  # Two filters, one per stage, so a change only rebuilds what it can affect: `env` (the env
+  # image and everything downstream of it) and `dev` (only the dev layer, which then builds
+  # FROM main's env images, the way a fork PR's does). Docs, the devcontainer example and the
+  # GHCR cleanup script match neither, so they build nothing; `lint` still checks them.
   changes:
     runs-on: ubuntu-latest
     permissions:
@@ -44,7 +49,9 @@ jobs:
       # read access to the PR itself.
       pull-requests: read
     outputs:
-      relevant: ${{ steps.filter.outputs.relevant || steps.force.outputs.relevant }}
+      env: ${{ steps.filter.outputs.env || steps.force.outputs.env }}
+      dev: ${{ steps.filter.outputs.dev || steps.force.outputs.dev }}
+      relevant: ${{ steps.filter.outputs.env == 'true' || steps.filter.outputs.dev == 'true' || steps.force.outputs.env == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -52,20 +59,28 @@ jobs:
         if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
         with:
           filters: |
-            relevant:
-              - 'ghci/**'
+            env:
+              - 'ghci/env/**'
+              - 'ghci/tests/**'
               - '.github/workflows/ghci.yaml'
               - '.github/workflows/build-multiarch.yaml'
-              - 'scripts/**'
+              - 'scripts/check-oci-metadata.py'
+              - 'scripts/image-size.py'
+            dev:
+              - 'ghci/dev/Dockerfile'
       - id: force
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-        run: echo "relevant=true" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "env=true" >> "$GITHUB_OUTPUT"
+          echo "dev=true" >> "$GITHUB_OUTPUT"
 
-  # The suffix build-multiarch.yaml's metadata step appends to every tag in this run, so each
-  # stage builds FROM the image the previous stage just published rather than main's:
-  # -pr-<N> on a PR, -mg-<sha> on a merge_group run, -<version> on a ghci-<version> tag,
-  # -<branch> on a non-main dispatch. A fork PR publishes nothing, so its stages build FROM
-  # main's images instead -- it has no packages:write to publish anything with.
+  # What this run builds, where it stages, and what it then publishes.
+  #
+  # value: the suffix every image this run builds is published under, so each stage builds
+  # FROM the image the previous stage just published rather than main's: -pr-<N> on a PR,
+  # -mg-<sha> on a merge_group run, -rc-<run_id> on a ghci-* tag, a dispatch, or a push to main
+  # the merge queue did not test (see below). A fork PR publishes nothing, so its stages build
+  # FROM main's images instead -- it has no packages:write to publish anything with.
   #
   # merge_group gets its own ephemeral suffix (keyed on the merge commit sha, not the PR
   # number) rather than reusing main's images like a fork PR does: unlike a fork PR, a
@@ -74,12 +89,37 @@ jobs:
   # have that combination validated together -- dev would build FROM whatever env main last
   # published, not the new env this same run just built. sha (not PR
   # number) keys the suffix because merge queues can batch several PRs into one merge_group
-  # run, so there may be no single PR number to key on.
+  # run, so there may be no single PR number to key on. -rc- is keyed on the run instead:
+  # a tag and a dispatch of the same sha must not overwrite each other's tested images.
+  #
+  # build: false only on a push to main whose -mg-<sha> images exist. The merge queue's merge
+  # commit becomes main's HEAD, so those are exactly what was tested for this commit, and
+  # `promote` retags them instead of rebuilding. A push the queue did not test (an admin
+  # merge, or images already cleaned up) builds and smoke-tests under -rc-<run_id> first.
+  #
+  # promote / release_suffix: whether `promote` publishes the tested images, and under which
+  # suffix: "" (the plain tags people pull) for main, -<version> for a ghci-<version> tag,
+  # -<branch> for a dispatch on another branch. PRs and the merge queue publish nothing.
+  #
+  # cache: the BuildKit cache scope (build-multiarch.yaml's cache_suffix): shared ("") for
+  # reviewed work, the PR's or branch's own otherwise.
   suffix:
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
     outputs:
       value: ${{ steps.suffix.outputs.value }}
+      build: ${{ steps.suffix.outputs.build }}
+      promote: ${{ steps.suffix.outputs.promote }}
+      release_suffix: ${{ steps.suffix.outputs.release_suffix }}
+      cache: ${{ steps.suffix.outputs.cache }}
     steps:
+      - uses: docker/login-action@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: suffix
         env:
           EVENT: ${{ github.event_name }}
@@ -88,27 +128,52 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
         run: |
+          build=true
+          promote=false
+          release_suffix=""
+          cache=""
           if [ "$EVENT" = merge_group ]; then
             value="-mg-$SHA"
           elif [ "$EVENT" = pull_request ] && [ "$FORK" = true ]; then
             value=""
           elif [ "$EVENT" = pull_request ]; then
             value="-pr-$PR"
-          elif [ "$REF_TYPE" = tag ]; then
-            value="-${REF_NAME#ghci-}"
-          elif [ "$REF_NAME" != main ]; then
-            # metadata-action's sanitization of branch names
-            # shellcheck disable=SC2001
-            value="-$(sed 's/[^a-zA-Z0-9._-]/-/g' <<< "$REF_NAME")"
+            cache="$value"
           else
-            value=""
+            promote=true
+            value="-rc-$RUN_ID"
+            if [ "$REF_TYPE" = tag ]; then
+              release_suffix="-${REF_NAME#ghci-}"
+            elif [ "$REF_NAME" != main ]; then
+              # metadata-action's sanitization of branch names
+              # shellcheck disable=SC2001
+              release_suffix="-$(sed 's/[^a-zA-Z0-9._-]/-/g' <<< "$REF_NAME")"
+              cache="$release_suffix"
+            elif [ "$EVENT" = push ]; then
+              # Every variant's env and dev image is published by the same merge_group run, so
+              # one of them is enough to tell whether the queue tested this commit; `promote`
+              # still checks each one it retags.
+              if docker buildx imagetools inspect "${IMAGE,,}:gnu-cpu-env-dev-mg-$SHA" > /dev/null; then
+                value="-mg-$SHA"
+                build=false
+              else
+                echo "::warning::no merge-queue images for $SHA; building and testing them before publishing"
+              fi
+            fi
           fi
-          echo "value=$value" >> "$GITHUB_OUTPUT"
+          {
+            echo "value=$value"
+            echo "build=$build"
+            echo "promote=$promote"
+            echo "release_suffix=$release_suffix"
+            echo "cache=$cache"
+          } >> "$GITHUB_OUTPUT"
 
+  # Cheap, so it runs on every change, including the ones that build nothing.
   lint:
-    needs: changes
-    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -119,6 +184,7 @@ jobs:
       - name: Check smoke script syntax
         run: |
           bash -n ghci/tests/smoke.sh
+          bash -n ghci/tests/smoke-dev.sh
           bash -n ghci/tests/apptainer.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
@@ -128,14 +194,19 @@ jobs:
       - name: Test GHCR cleanup selection
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Check all GitHub Actions workflows
-        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
 
-  # The variant list: one context (ghci/env), one set of build args per env. Each env is a
-  # single self-contained build: spack pulls whatever it can from our own and the E4S binary
-  # caches (see ghci/env/spack-configuration/mirrors.yaml) and builds only the rest.
+  # THE VARIANT LIST. One context (ghci/env), one set of build args per env, and the arches it
+  # is built for. This is the only place a variant is defined: `dev` and `promote` reuse this
+  # list through the `*variants` alias, and the per-arch jobs reuse `smoke`'s `*per_arch`
+  # matrix below. Add or change a variant here (and its arches in `*per_arch`), nowhere else.
+  #
+  # Each env is a single self-contained build: spack pulls whatever it can from our own and
+  # the E4S binary caches (see ghci/env/spack-configuration/mirrors.yaml) and builds only the
+  # rest.
   env:
     needs: [changes, suffix, lint]
-    if: needs.changes.outputs.relevant == 'true'
+    if: needs.changes.outputs.env == 'true' && needs.suffix.outputs.build == 'true'
     name: ${{ matrix.env }}
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -145,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        include: &variants
           - env: gnu-cpu-env
             arches: '["x86_64", "aarch64"]'
             args: |
@@ -185,10 +256,16 @@ jobs:
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} image for E3SM testing and development
       tag_suffix: ${{ needs.suffix.outputs.value }}
+      cache_suffix: ${{ needs.suffix.outputs.cache }}
       build_args: ${{ matrix.args }}
 
+  # Builds FROM this run's env image, or, when this change leaves env alone (`env` skipped),
+  # FROM main's.
   dev:
-    needs: [suffix, env]
+    needs: [changes, suffix, env]
+    if: >-
+      ${{ !cancelled() && needs.suffix.outputs.build == 'true' && needs.changes.outputs.relevant == 'true'
+      && (needs.env.result == 'success' || (needs.env.result == 'skipped' && needs.changes.outputs.env != 'true')) }}
     name: ${{ matrix.env }}-dev
     uses: ./.github/workflows/build-multiarch.yaml
     permissions:
@@ -197,14 +274,10 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
+      # The variant list from `env` (the build args there are for env; dev only needs the
+      # name and arches).
       matrix:
-        include:
-          - env: gnu-cpu-env
-            arches: '["x86_64", "aarch64"]'
-          - env: gnu-cuda-env
-            arches: '["x86_64", "aarch64"]'
-          - env: intel-cpu-env
-            arches: '["x86_64"]'
+        include: *variants
     with:
       image_name: e3sm-ghci
       tag: ${{ matrix.env }}-dev
@@ -212,8 +285,9 @@ jobs:
       arches: ${{ matrix.arches }}
       description: ${{ matrix.env }} plus developer tooling
       tag_suffix: ${{ needs.suffix.outputs.value }}
+      cache_suffix: ${{ needs.suffix.outputs.cache }}
       build_args: |
-        BASE_TAG=${{ matrix.env }}${{ needs.suffix.outputs.value }}
+        BASE_TAG=${{ matrix.env }}${{ needs.changes.outputs.env == 'true' && needs.suffix.outputs.value || '' }}
         VARIANT=${{ matrix.env }}
 
   # Smoke-test freshly published images on separate runners, so pulling/running them
@@ -228,22 +302,19 @@ jobs:
       packages: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - env: gnu-cpu-env
-            arch: x86_64
-          - env: gnu-cpu-env
-            arch: aarch64
-          - env: gnu-cuda-env
-            arch: x86_64
-          - env: gnu-cuda-env
-            arch: aarch64
+      # Every variant from `env` on each of its arches: reused by every per-arch job
+      # (`*per_arch`). Keep the exclusions in step with the `arches` in the variant list.
+      matrix: &per_arch
+        env: [gnu-cpu-env, gnu-cuda-env, intel-cpu-env]
+        arch: [x86_64, aarch64]
+        exclude:
           - env: intel-cpu-env
-            arch: x86_64
+            arch: aarch64
     name: smoke (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      VARIANT: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -255,7 +326,7 @@ jobs:
         run: |
           echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
           docker pull "${IMAGE,,}"
-          python3 scripts/image-size.py "${IMAGE,,}" --json > image-size.json
+          python3 scripts/image-size.py "${IMAGE,,}" --json --variant "$VARIANT" --kind env > image-size.json
           python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
       - name: Test login environment, Python, NetCDF, and MPI
         run: |
@@ -269,6 +340,74 @@ jobs:
           path: image-size.json
           if-no-files-found: warn
           retention-days: 30
+
+  # The same for the -dev images, which is what developers actually run (Dev Containers):
+  # smoke-dev.sh reruns the env checks through the dev layer, then checks what it adds.
+  smoke-dev:
+    needs: [suffix, dev]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: *per_arch
+    name: smoke-dev (${{ matrix.env }}, ${{ matrix.arch }})
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
+      EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      VARIANT: ${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and measure the built image
+        run: |
+          echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+          docker pull "${IMAGE,,}"
+          python3 scripts/image-size.py "${IMAGE,,}" --json --variant "$VARIANT" --kind dev > image-size.json
+          python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Test the env through the dev layer, and the dev tools
+        run: |
+          docker run --rm -e EXPECT_CUDA \
+            -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
+            "$IMAGE" bash -l /opt/ghci-tests/smoke-dev.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: image-size-${{ matrix.env }}-dev-${{ matrix.arch }}
+          path: image-size.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # One table for the run's summary page, covering every env and dev image smoke measured:
+  # the baseline to slim against, and the place to notice an image growing.
+  sizes:
+    needs: [smoke, smoke-dev]
+    if: ${{ !cancelled() && (needs.smoke.result != 'skipped' || needs['smoke-dev'].result != 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: image-size-*
+          path: sizes
+      - name: Size table
+        run: |
+          shopt -s nullglob
+          reports=(sizes/*/image-size.json)
+          if [ "${#reports[@]}" -gt 0 ]; then
+            python3 scripts/image-size.py --table "${reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # The images are run with Apptainer on HPC systems, where the user, the login shell, a
   # read-only filesystem and the host environment all differ from docker. Pull the published
@@ -299,17 +438,85 @@ jobs:
       - name: Test under Apptainer
         run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
 
+  # Publish the tags people pull (gnu-cpu-env, ..., gnu-cpu-env-<version> for a ghci-* tag)
+  # only by retagging the exact multi-arch images that were tested, never by a build. On a push
+  # to main those are the merge queue's -mg-<sha> images; otherwise this run's own -rc-<run_id>
+  # images, and only once every test of them passed. A failed test therefore leaves the
+  # previous tag where it was.
+  #
+  # imagetools create from a single index with nothing to change re-pushes that same index, so
+  # the published tag has the tested digest, annotations included. The job checks that, so the
+  # log shows which digest was tested and published.
+  promote:
+    needs: [changes, suffix, env, dev, smoke, smoke-dev, apptainer]
+    if: >-
+      ${{ !cancelled() && needs.changes.outputs.relevant == 'true'
+      && needs.suffix.outputs.promote == 'true'
+      && (needs.suffix.outputs.build == 'false'
+      || (needs.dev.result == 'success' && needs['smoke-dev'].result == 'success'
+      && (needs.changes.outputs.env != 'true'
+      || (needs.env.result == 'success' && needs.smoke.result == 'success' && needs.apptainer.result == 'success')))) }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *variants
+    name: promote (${{ matrix.env }})
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retag the tested images
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
+          VARIANT: ${{ matrix.env }}
+          FROM: ${{ needs.suffix.outputs.value }}
+          TO: ${{ needs.suffix.outputs.release_suffix }}
+        run: |
+          # IMAGE comes from env above; image is its lowercase form
+          # shellcheck disable=SC2153
+          image="${IMAGE,,}"
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+          promoted=0
+          for tag in "$VARIANT" "$VARIANT-dev"; do
+            # A change that left env alone rebuilt only dev, so there is no tested env image
+            # to promote: the published env tag already is the one dev was built and tested on.
+            if ! docker buildx imagetools inspect "$image:$tag$FROM" > /dev/null 2>&1; then
+              echo "$tag$FROM was not rebuilt; $tag$TO stays as it is"
+              continue
+            fi
+            tested=$(digest "$image:$tag$FROM")
+            docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
+            published=$(digest "$image:$tag$TO")
+            echo "$image:$tag$TO = $published (tested as $tag$FROM = $tested)"
+            if [ "$published" != "$tested" ]; then
+              echo "::error::$tag$TO is $published, not the tested $tested"
+              exit 1
+            fi
+            promoted=$((promoted + 1))
+          done
+          if [ "$promoted" -eq 0 ]; then
+            echo "::error::no tested $VARIANT image with suffix $FROM to promote"
+            exit 1
+          fi
+
   # Publish what the env builds compiled to our own Spack binary cache on GHCR (the `e3sm`
   # mirror in ghci/env/spack-configuration/mirrors.yaml), so rebuilds, new variants and the
   # image split stop paying for source builds. Every installed package is pushed from the
   # image that just passed its smoke test, and the ones already in the cache are skipped, so a
   # rebuild only uploads what is new.
   #
-  # Only on events a maintainer controls, never on a PR or a merge_group run: a push to main,
-  # a ghci-* tag, or a manual dispatch (which needs write access, and may name any branch so
-  # the push path can be exercised before a change merges). merge_group is left out on
-  # purpose: it builds the same tree the push to main that follows it does, so it would only
-  # make the queue wait for a duplicate upload. The cache is keyed by spec hash, and with
+  # Only once `promote` has published the tested images, so only on events a maintainer
+  # controls, never on a PR or a merge_group run: a push to main (pushing from the merge
+  # queue's images it just promoted), a ghci-* tag, or a manual dispatch (which needs write
+  # access, and may name any branch so the push path can be exercised before a change merges).
+  # Pushing from the merge queue itself would make the queue wait for the upload, and would
+  # let a batch that is then dropped put its binaries in the cache. The cache is keyed by spec hash, and with
   # `reuse: true` the concretizer prefers what it finds there, so whatever reaches the cache
   # shapes every later build's solution, not just its build time. Nor does it run on a fork,
   # which has no write access to e3sm-project's packages.
@@ -318,29 +525,18 @@ jobs:
   # of the change, so a GHCR hiccup or a slow first upload shows up as a red job but must not
   # block the merge queue.
   buildcache:
-    needs: [suffix, env, smoke]
+    needs: [changes, suffix, promote]
+    # A dev-only change built no env image, so there is nothing new to push.
     if: >-
-      needs.env.result == 'success' && needs.smoke.result == 'success' &&
-      github.repository_owner == 'E3SM-Project' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      needs.promote.result == 'success' && needs.changes.outputs.env == 'true' &&
+      github.repository_owner == 'E3SM-Project'
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - env: gnu-cpu-env
-            arch: x86_64
-          - env: gnu-cpu-env
-            arch: aarch64
-          - env: gnu-cuda-env
-            arch: x86_64
-          - env: gnu-cuda-env
-            arch: aarch64
-          - env: intel-cpu-env
-            arch: x86_64
+      matrix: *per_arch
     name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
@@ -405,7 +601,7 @@ jobs:
   # posts a conclusion, so the required check is never left permanently "Expected".
   required-check:
     name: required-check
-    needs: [changes, suffix, lint, env, dev, smoke, apptainer]
+    needs: [changes, suffix, lint, env, dev, smoke, smoke-dev, apptainer, promote]
     if: always()
     runs-on: ubuntu-latest
     steps:
