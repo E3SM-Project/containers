@@ -20,8 +20,12 @@ from datetime import datetime, timezone
 # The packages this repository publishes and cleans. A package not listed here is never
 # touched -- e.g. the Spack binary cache (e3sm-spack-buildcache), which spack manages itself.
 PACKAGES = [
+    "e3sm-image",
+    "e3sm-image-buildcache",  # BuildKit registry cache (build-multiarch.yaml's CACHE)
+    # The old names, no longer published to: their PR, merge queue and cache tags from before
+    # the rename still need to age out.
     "e3sm-ghci",
-    "e3sm-ghci-buildcache",  # BuildKit registry cache (build-multiarch.yaml's CACHE)
+    "e3sm-ghci-buildcache",
 ]
 
 # BuildKit cache tags carry a trailing arch (<tag>-pr-<N>-<arch>), image tags do not.

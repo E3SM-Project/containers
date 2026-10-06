@@ -1,4 +1,4 @@
-# E3SM ghci containers
+# E3SM images
 
 Development and testing environments for E3SM: a spack-built software stack on UBI9,
 runnable anywhere with podman, docker or Apptainer (see
@@ -24,7 +24,7 @@ Public images can be pulled anonymously. If you need authenticated access to GHC
 podman run --rm -it --userns=keep-id:uid=1000,gid=1000 \
   -v /path/to/host/inputdata:/projects/e3sm/data/inputdata:z \
   -v /path/to/host/baselines:/projects/e3sm/data/baselines:z \
-  ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+  ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
 ```
 
 The default command is already `bash --login`. A plain `/bin/bash` gives you a non-login
@@ -40,29 +40,33 @@ manifest list holding a natively-built image (no emulation) for each arch listed
 name. The Intel images are `x86_64` only, and every `x86_64` image needs an **x86-64-v3**
 CPU (AVX2: Intel Haswell / AMD Excavator or newer), the target the binary cache is built for:
 
-| Tag                 | Arches          | Compiler | Notes                                                       |
-|---------------------|-----------------|----------|-------------------------------------------------------------|
-| `gnu-cpu-env`       | x86_64, aarch64 | GNU      | CPU-only stack; the aarch64 image runs well on Apple Silicon |
-| `gnu-cuda-env`      | x86_64, aarch64 | GNU      | CUDA stack: 12.4 on x86_64, 13.0 on aarch64, which targets NVIDIA "superchip" systems such as Grace Hopper/Blackwell |
-| `intel-cpu-env`     | x86_64          | Intel    | CPU-only stack (Intel oneAPI is x86_64-only)                 |
-| `<env>-dev`         | as above        | as above | Any of the above plus developer tooling; see below           |
+Tags name the compiler and MPI by major version (`gnu13-openmpi4`), plus the accelerator
+when there is one (`-cuda`); no accelerator means a host-only stack. The exact versions are
+in `/etc/e3sm/image.env` inside the image.
+
+| Tag                  | Arches          | Compiler      | MPI          | Notes |
+|----------------------|-----------------|---------------|--------------|-------|
+| `gnu13-openmpi4`     | x86_64, aarch64 | GCC 13        | Open MPI 4   | CPU-only stack; the aarch64 image runs well on Apple Silicon |
+| `gnu13-mpich4-cuda`  | x86_64, aarch64 | GCC 13        | MPICH 4      | CUDA stack: 12.4 on x86_64, 13.0 on aarch64, which targets NVIDIA "superchip" systems such as Grace Hopper/Blackwell |
+| `intel2024-openmpi4` | x86_64          | oneAPI 2024.1 | Open MPI 4   | CPU-only stack (Intel oneAPI is x86_64-only) |
+| `<tag>-dev`          | as above        | as above      | as above     | Any of the above plus developer tooling; see below |
 
 Every env image also carries `less`, `nano`, `screen` and `zip`, so a shell in the image
 the tests run in is usable for debugging.
 
-The x86_64 images target `x86_64_v3` (AVX2: Intel Haswell / AMD Zen and newer), which is
+The x86_64 images target `x86_64_v3` (AVX2: Intel Haswell / AMD Excavator and newer), which is
 what the binary cache below is built for; the aarch64 images are fully generic.
 
 To pull a specific arch on a host of the other arch (under emulation), ask for the
 platform rather than a different tag:
 
 ```bash
-podman pull --platform linux/arm64 ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+podman pull --platform linux/arm64 ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
 ```
 
 ## The `-dev` images
 
-`<env>-dev` is the matching env plus the things you want when you actually work inside the
+`<tag>-dev` is the matching env plus the things you want when you actually work inside the
 container rather than just run tests in it:
 
 - **Coding agents:** `claude`, `codex`, `copilot`, `opencode`
@@ -144,17 +148,17 @@ Builds run as root; the env and `-dev` images switch to `e3sm` at the end.
 HPC systems rarely have docker or podman; they have Apptainer (formerly Singularity). The
 images work there, but several things behave differently from `docker run`. Everything
 marked *tested* is run by `ghci/tests/apptainer.sh`, which CI runs against the published
-`gnu-cpu-env` image on x86_64 with Apptainer 1.4 (user-namespace mode); the rest is
+`gnu13-openmpi4` image on x86_64 with Apptainer 1.4 (user-namespace mode); the rest is
 documented from the image's contents and has not been run on real HPC hardware.
 
 ```bash
 # the SIF is a single read-only file, so build it once, somewhere with room
 export APPTAINER_CACHEDIR=$SCRATCH/apptainer-cache APPTAINER_TMPDIR=$SCRATCH/tmp
-apptainer pull e3sm-ghci-gnu-cpu-env.sif docker://ghcr.io/e3sm-project/e3sm-ghci:gnu-cpu-env
+apptainer pull e3sm-image-gnu13-openmpi4.sif docker://ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
 
 apptainer run --cleanenv \
   --bind /path/to/inputdata:/projects/e3sm/data/inputdata \
-  e3sm-ghci-gnu-cpu-env.sif
+  e3sm-image-gnu13-openmpi4.sif
 ```
 
 For a private GHCR package, set `APPTAINER_DOCKER_USERNAME` and `APPTAINER_DOCKER_PASSWORD`
@@ -251,11 +255,11 @@ They persist for the life of the container, which is disposable by design.
 ## Manually rebuilding the stack
 
 To test a different compiler or library version, rebuild locally. Each image builds for the
-arch you are on; there is no arch build arg to set. Every build arg has the `gnu-cpu-env`
+arch you are on; there is no arch build arg to set. Every build arg has the `gnu13-openmpi4`
 value as its default, so this alone builds that image:
 
 ```bash
-podman build --tag e3sm-env:gnu-cpu-env ghci/env/
+podman build --tag e3sm-image:gnu13-openmpi4 ghci/env/
 ```
 
 and, for example, gcc 15 with openmpi 5:
@@ -284,9 +288,9 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 
 ## How the images are put together
 
-`<compiler>-<backend>-env` -> `<env>-dev`. That is two Dockerfiles, not one per variant:
+`<tag>` -> `<tag>-dev`. That is two Dockerfiles, not one per variant:
 `ghci/env/Dockerfile` builds every env from build args, and the variant list is the `env`
-matrix in `.github/workflows/ghci.yaml`. `ghci/dev/Dockerfile` is likewise one recipe for
+matrix in `.github/workflows/ghci.yaml` (defined once there; the other jobs reuse it). `ghci/dev/Dockerfile` is likewise one recipe for
 all the `-dev` images, built `FROM` the env tag.
 
 The env Dockerfile is ordered from most to least shared: system packages and spack first
@@ -305,7 +309,7 @@ is built with `gcc-toolset-13`, so with gcc 13.3.1 most of the tree -- cmake, py
 boost, yaml-cpp, and nearly every dependency -- is downloaded in seconds instead of built.
 Whatever the cache does not have (a version, variant or compiler it was not built with) is
 built from source exactly as before; the cache never changes *what* gets installed, only
-how long it takes. In the default gnu-cpu-env, what still builds is openmpi 4 (E4S only has
+how long it takes. In the default gnu13-openmpi4, what still builds is openmpi 4 (E4S only has
 openmpi 5) and the MPI-dependent I/O libraries and MOAB (E4S builds those against
 its own external mpich). gdb and valgrind come from RHEL.
 
@@ -350,9 +354,12 @@ anywhere.
 ## Size reports and runtime checks
 
 For same-repository PRs, CI tests every published env/platform combination as the non-root
-user (and `gnu-cpu-env` on x86_64 again under Apptainer, see above): login environment, writable venv, Python dependency consistency, NetCDF round-trip,
-Torch flavor, a two-rank MPI C program, and a Fortran executable. Each smoke job uploads
-an `image-size-<env>-<arch>` artifact with exact bytes, image ID, and layer commands.
+user (and `gnu13-openmpi4` on x86_64 again under Apptainer, see above): login environment, writable venv, Python dependency consistency, NetCDF round-trip,
+Torch flavor, a two-rank MPI C program, and a Fortran executable. The `-dev` images get the
+same checks plus their own (`ghci/tests/smoke-dev.sh`): the dev tools and agents on PATH,
+and the ownership of the dirs a dev container mounts onto. Each smoke job uploads an
+`image-size-<tag>-<arch>` artifact with exact bytes, image ID, and layer commands, and the
+run's summary page has one table of every image's compressed and expanded size.
 
 The ARM CUDA image currently has one verified upstream packaging defect:
 `nvidia-cusparselt-cu13==0.8.1` has an `aarch64` wheel filename but an internal

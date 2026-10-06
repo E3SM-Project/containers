@@ -1,5 +1,5 @@
 ARG BASE_TAG=UNSET
-ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-ghci
+ARG BASE_IMAGE=ghcr.io/e3sm-project/e3sm-image
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
 # Developer conveniences on top of a finished env image. One recipe for every variant:
@@ -90,7 +90,7 @@ RUN printf '%s\n' \
     '  [ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
     '  [ -f /usr/share/git-core/contrib/completion/git-prompt.sh ] && . /usr/share/git-core/contrib/completion/git-prompt.sh' \
     '  export GIT_PS1_SHOWDIRTYSTATE=1' \
-    '  PS1="\[\e[1;32m\]\u@${E3SM_ENV:-ghci}\[\e[0m\]:\[\e[1;34m\]\w\[\e[0;33m\]$(__git_ps1 " (%s)" 2>/dev/null)\[\e[0m\]\$ "' \
+    '  PS1="\[\e[1;32m\]\u@${E3SM_ENV:-e3sm}\[\e[0m\]:\[\e[1;34m\]\w\[\e[0;33m\]$(__git_ps1 " (%s)" 2>/dev/null)\[\e[0m\]\$ "' \
     '  alias ll="ls -alFh"' \
     '  alias ..="cd .."' \
     '  shopt -s checkwinsize histappend' \

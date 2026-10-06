@@ -20,7 +20,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# <compiler>-<backend>-env -> <env>-dev, the dev stage building FROM the arch-independent tag
+# <tag> -> <tag>-dev, the dev stage building FROM the arch-independent tag
 # the env stage published. See build-multiarch.yaml.
 #
 # Path filtering happens inside the workflow (the `changes` job below) rather than on the
@@ -129,7 +129,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
-          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
+          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image
         run: |
           build=true
           promote=false
@@ -156,7 +156,7 @@ jobs:
               # Every variant's env and dev image is published by the same merge_group run, so
               # one of them is enough to tell whether the queue tested this commit; `promote`
               # still checks each one it retags.
-              if docker buildx imagetools inspect "${IMAGE,,}:gnu-cpu-env-dev-mg-$SHA" > /dev/null; then
+              if docker buildx imagetools inspect "${IMAGE,,}:gnu13-openmpi4-dev-mg-$SHA" > /dev/null; then
                 value="-mg-$SHA"
                 build=false
               else
@@ -217,7 +217,7 @@ jobs:
       fail-fast: false
       matrix:
         include: &variants
-          - env: gnu-cpu-env
+          - env: gnu13-openmpi4
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
@@ -227,7 +227,8 @@ jobs:
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
-          - env: gnu-cuda-env
+          # -cuda without a version: 12.4 on x86_64, 13.0 on aarch64 (see ghci/README.md)
+          - env: gnu13-mpich4-cuda
             arches: '["x86_64", "aarch64"]'
             args: |
               COMPILER=gcc
@@ -238,7 +239,7 @@ jobs:
               WITH_CUDA=yes
               WITH_MOAB=yes
           # Intel oneAPI ships for x86_64 only
-          - env: intel-cpu-env
+          - env: intel2024-openmpi4
             arches: '["x86_64"]'
             args: |
               COMPILER=intel-oneapi-compilers
@@ -250,7 +251,7 @@ jobs:
               WITH_CUDA=no
               WITH_MOAB=yes
     with:
-      image_name: e3sm-ghci
+      image_name: e3sm-image
       tag: ${{ matrix.env }}
       context: ghci/env
       arches: ${{ matrix.arches }}
@@ -279,7 +280,7 @@ jobs:
       matrix:
         include: *variants
     with:
-      image_name: e3sm-ghci
+      image_name: e3sm-image
       tag: ${{ matrix.env }}-dev
       context: ghci/dev
       arches: ${{ matrix.arches }}
@@ -305,14 +306,14 @@ jobs:
       # Every variant from `env` on each of its arches: reused by every per-arch job
       # (`*per_arch`). Keep the exclusions in step with the `arches` in the variant list.
       matrix: &per_arch
-        env: [gnu-cpu-env, gnu-cuda-env, intel-cpu-env]
+        env: [gnu13-openmpi4, gnu13-mpich4-cuda, intel2024-openmpi4]
         arch: [x86_64, aarch64]
         exclude:
-          - env: intel-cpu-env
+          - env: intel2024-openmpi4
             arch: aarch64
     name: smoke (${{ matrix.env }}, ${{ matrix.arch }})
     env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
       VARIANT: ${{ matrix.env }}
     steps:
@@ -355,7 +356,7 @@ jobs:
       matrix: *per_arch
     name: smoke-dev (${{ matrix.env }}, ${{ matrix.arch }})
     env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
       VARIANT: ${{ matrix.env }}
     steps:
@@ -419,13 +420,13 @@ jobs:
     permissions:
       contents: read
       packages: read
-    name: apptainer (gnu-cpu-env, x86_64)
+    name: apptainer (gnu13-openmpi4, x86_64)
     env:
       APPTAINER_VERSION: 1.4.5
       APPTAINER_DEB_SHA256: 70f19af846501acfbc2e42e7cfeee9ee11ddbbfa1c3502d0d99cde34e8e0af05
       APPTAINER_DOCKER_USERNAME: ${{ github.actor }}
       APPTAINER_DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:gnu-cpu-env${{ needs.suffix.outputs.value }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:gnu13-openmpi4${{ needs.suffix.outputs.value }}
     steps:
       - uses: actions/checkout@v7
       - name: Install Apptainer
@@ -438,10 +439,10 @@ jobs:
       - name: Test under Apptainer
         run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
 
-  # Publish the tags people pull (gnu-cpu-env, ..., gnu-cpu-env-<version> for a ghci-* tag)
-  # only by retagging the exact multi-arch images that were tested, never by a build. On a push
-  # to main those are the merge queue's -mg-<sha> images; otherwise this run's own -rc-<run_id>
-  # images, and only once every test of them passed. A failed test therefore leaves the
+  # Publish the tags people pull (gnu13-openmpi4, ..., gnu13-openmpi4-<version> for a ghci-*
+  # tag) only by retagging the exact multi-arch images that were tested, never by a build. On a
+  # push to main those are the merge queue's -mg-<sha> images; otherwise this run's own
+  # -rc-<run_id> images, and only once every test of them passed. A failed test therefore leaves the
   # previous tag where it was.
   #
   # imagetools create from a single index with nothing to change re-pushes that same index, so
@@ -473,7 +474,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Retag the tested images
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci
+          IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image
           VARIANT: ${{ matrix.env }}
           FROM: ${{ needs.suffix.outputs.value }}
           TO: ${{ needs.suffix.outputs.release_suffix }}
@@ -483,7 +484,8 @@ jobs:
           image="${IMAGE,,}"
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
           promoted=0
-          for tag in "$VARIANT" "$VARIANT-dev"; do
+          for kind in "" -dev; do
+            tag="$VARIANT$kind"
             # A change that left env alone rebuilt only dev, so there is no tested env image
             # to promote: the published env tag already is the one dev was built and tested on.
             if ! docker buildx imagetools inspect "$image:$tag$FROM" > /dev/null 2>&1; then
@@ -493,7 +495,7 @@ jobs:
             tested=$(digest "$image:$tag$FROM")
             docker buildx imagetools create -t "$image:$tag$TO" "$image:$tag$FROM"
             published=$(digest "$image:$tag$TO")
-            echo "$image:$tag$TO = $published (tested as $tag$FROM = $tested)"
+            echo "$tag$TO = $published (tested as $tag$FROM = $tested)"
             if [ "$published" != "$tested" ]; then
               echo "::error::$tag$TO is $published, not the tested $tested"
               exit 1
@@ -539,7 +541,7 @@ jobs:
       matrix: *per_arch
     name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
     env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-ghci:${{ matrix.env }}${{ needs.suffix.outputs.value }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ needs.suffix.outputs.value }}
       GHCR_USER: ${{ github.actor }}
       GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
