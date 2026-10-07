@@ -539,8 +539,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # One at a time: the variants share specs (same hash, same tag), and two jobs pushing the
+    # same tag at once get a 403 from GHCR. Run in turn, each job skips what the ones before
+    # it already pushed.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: *per_arch
     name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
     env:
