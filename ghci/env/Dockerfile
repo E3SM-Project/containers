@@ -365,7 +365,10 @@ RUN . /etc/profile && mkdir -p /projects/e3sm/software /projects/e3sm/data && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
     chmod 0440 /etc/sudoers.d/${USERNAME} && \
-    chown ${USERNAME}:${USERNAME} /projects/e3sm /projects/e3sm/software /projects/e3sm/data
+    chown ${USERNAME}:${USERNAME} /projects/e3sm /projects/e3sm/software /projects/e3sm/data && \
+    chmod 1777 /projects/e3sm/data
+# data/ is world-writable and sticky, like /tmp, so a run as another user (a CI runner) can
+# still download inputdata and write baselines there when nothing is mounted over it.
 
 # What this image is, for the smoke tests and for anyone inspecting a container
 RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
