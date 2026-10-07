@@ -186,6 +186,7 @@ jobs:
           bash -n ghci/tests/smoke.sh
           bash -n ghci/tests/smoke-dev.sh
           bash -n ghci/tests/apptainer.sh
+          bash -n ghci/tests/dev-container.sh
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
       # cleanup-ghcr-packages.yaml deletes package versions on a schedule; its selection logic
@@ -334,6 +335,19 @@ jobs:
           docker run --rm -e EXPECT_CUDA \
             -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
             "$IMAGE" bash -l /opt/ghci-tests/smoke.sh
+      # As a uid the image doesn't know, the way a CI job runs it with `--user`: HOME must
+      # not be e3sm's, or git fails reading /home/e3sm/.gitconfig. `git config --get` exits
+      # 1 for an unset key and 128 when it cannot read the config. It must also be able to
+      # write under /projects/e3sm/data, where E3SM's ghci machine keeps inputdata/baselines.
+      - name: Test running as another user
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" "$IMAGE" bash -c '
+            echo "HOME=$HOME"
+            test "$HOME" != /home/e3sm
+            rc=0; git config --global --get user.name || rc=$?
+            test "$rc" -le 1
+            mkdir /projects/e3sm/data/inputdata && rmdir /projects/e3sm/data/inputdata
+          '
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -538,8 +552,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # One at a time: the variants share specs (same hash, same tag), and two jobs pushing the
+    # same tag at once get a 403 from GHCR. Run in turn, each job skips what the ones before
+    # it already pushed.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: *per_arch
     name: buildcache (${{ matrix.env }}, ${{ matrix.arch }})
     env:

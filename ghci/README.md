@@ -27,10 +27,31 @@ podman run --rm -it --userns=keep-id:uid=1000,gid=1000 \
   ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
 ```
 
-The default command is already `bash --login`. A plain `/bin/bash` gives you a non-login
-shell, which skips `/etc/profile.d` and leaves you without the modules, `SPACK_ARCH`, or
-the python venv. `--userns=keep-id:uid=1000,gid=1000` makes the mounts writable under
-rootless podman; drop it with docker (see [The default user](#the-default-user)).
+The default command is `bash --login`. `--userns=keep-id:uid=1000,gid=1000` makes the
+mounts writable under rootless podman; drop it with docker (see
+[The default user](#the-default-user)).
+
+### Running a command in the image
+
+The whole environment (lmod modules, `SPACK_ARCH`, the compiler, the python venv) is set
+up by `/etc/profile.d`, which only a **login** shell reads. The images handle that for you
+wherever they can:
+
+- **`docker run` / `podman run` with a command** goes through the image's entrypoint,
+  `e3sm-env`, which starts a login shell and `exec`s the command in it. So
+  `podman run --rm IMAGE cmake --version` or `podman run --rm IMAGE python3 script.py`
+  (the venv's python) just work; arguments are passed through unchanged, and signals and
+  the exit status are the command's own. `--entrypoint ''` gets you the bare image.
+- **`docker exec` / `podman exec` never use the entrypoint**, so a command there has the
+  image's `ENV` but none of the login environment. Use `podman exec -it CONTAINER bash -l`
+  for a shell, or `podman exec CONTAINER e3sm-env <command>`.
+- The same goes for anything else that starts a process in an existing container without
+  a login shell -- devcontainer lifecycle hooks (`sh -c`), `apptainer exec`: wrap the
+  command in `e3sm-env`.
+
+An interactive shell should still be a login shell (`bash -l`, which the default command
+is): it also gets the history key bindings and, in the `-dev` images, the prompt and
+completion, which profile.d sets up but cannot export.
 
 ## Available images
 
@@ -103,11 +124,16 @@ integrated terminal a `bash -l` profile, and wrap lifecycle hooks -- which run u
 `sh -c` -- in `e3sm-env`:
 
 ```jsonc
-"postCreateCommand": "e3sm-env git submodule update --init --recursive"
+"postCreateCommand": "e3sm-fix-ownership && e3sm-env git submodule update --init --recursive"
 ```
 
+(`e3sm-fix-ownership` is for Linux hosts whose uid is not 1000; see
+[The default user](#the-default-user).)
+
 `e3sm-env <cmd>` runs a command with the full login environment from a context that has
-none. Without it, `postCreateCommand` cannot find a compiler.
+none. It is also the images' entrypoint, but Dev Containers starts the container with its
+own command and runs the hooks through `docker exec`, so neither goes through it. Without
+it, `postCreateCommand` cannot find a compiler.
 
 **Credentials.** `git push` over SSH needs no setup: VS Code forwards your ssh-agent, and
 the `-dev` images drop the base image's `git@github.com:` -> HTTPS rewrite (which exists so
@@ -119,6 +145,14 @@ process in the container, agents included, being able to read those credentials.
 `gh`, `codex`, `copilot` and `opencode` keep their credentials in files, so bind-mounting
 those works. Claude Code on macOS keeps its token in the **Keychain**, so it cannot be
 mounted in -- log in once inside and the `~/.claude` volume keeps it across rebuilds.
+
+**Trust.** A bind-mounted checkout is owned by your host uid, which git calls "dubious
+ownership" when it is not the container user's. The `-dev` images mark everything under
+`/projects/e3sm/work` (submodules included) as safe for git, and nothing else; for a
+checkout elsewhere, run `git config --global --add safe.directory <path>` once. The example
+leaves VS Code's Workspace Trust on, so VS Code asks once whether to trust the folder (and
+may ask again after a rebuild); its comments show how to turn the prompt off and what that
+costs.
 
 ## The default user
 
@@ -136,6 +170,16 @@ The images run as **`e3sm` (uid/gid 1000)**, not root, with passwordless `sudo`:
   as your host uid instead, which cannot write to the image's own `/projects/e3sm`
   paths unless that uid happens to be 1000.
 - `--user root` gets you a root shell if you need one.
+- **Dev Containers on Linux** (`"updateRemoteUserUID": true`, as in the example) changes
+  `e3sm`'s uid/gid to yours when your host uid is not 1000, but only re-owns the home
+  directory. The python venv and `/projects/e3sm` stay owned by uid 1000, so `pip install`
+  and creating anything next to the checkout fail. The `-dev` images carry
+  `e3sm-fix-ownership`, which hands those to the current user; the example runs it from
+  `postCreateCommand`, and so should your own `devcontainer.json`. With uid 1000 (and on
+  macOS and Windows, where nothing is remapped) it returns at once; after a remap it copies
+  the venv into the container's writable layer once (1-6 GB depending on the image), which
+  can take a minute. It leaves what is inside `/projects/e3sm/data` and
+  `/projects/e3sm/work` alone: those are your bind mounts.
 - At the labs your uid is usually not 1000, and shared inputdata/baselines are reachable
   through a group instead. Hand that group to the container: with docker,
   `--group-add $(stat -c %g /path/to/baselines)`; with rootless podman, whose user
@@ -175,10 +219,13 @@ What differs from docker/podman:
   lives in `/etc/profile.d`, which only a login shell reads, and `apptainer exec` does not
   start one. *Tested:*
   - `apptainer run img.sif` runs the image's default command, `bash --login`;
+  - `apptainer run img.sif <command>` runs the command through the image's entrypoint,
+    `e3sm-env`;
   - `apptainer exec img.sif bash -l -c '<command>'`;
   - `apptainer exec img.sif e3sm-env <command>`.
 
-  A plain `apptainer exec img.sif cmake --version` finds none of the modules.
+  `apptainer exec` does not use the entrypoint, so a plain
+  `apptainer exec img.sif cmake --version` finds none of the modules.
 - **Use `--cleanenv` (`-e`).** By default your host environment is passed into the
   container, so host `PATH`, `LD_LIBRARY_PATH`, `PYTHONPATH`, certificate-bundle variables
   and the like can shadow or break what the image provides. `--cleanenv` keeps the image's
@@ -251,6 +298,14 @@ pip install <package-name>
 ```
 
 They persist for the life of the container, which is disposable by design.
+
+`mpi4py` is built from source against the image's MPI, so it uses the same `mpirun` and
+library as the compiled code. `netCDF4` is the PyPI wheel, which carries its own serial
+copies of netCDF-C and HDF5 (`netCDF4.__netcdf4libversion__`,
+`netCDF4.__hdf5libversion__`) rather than using spack's; that is fine for reading and
+writing files -- the smoke test checks it reads what the spack stack writes -- but it has
+no parallel I/O. For that, build it against spack's libraries (not tested by CI):
+`HDF5_DIR=$HDF5_ROOT NETCDF4_DIR=$NETCDF_C_ROOT pip install --no-binary netCDF4 netCDF4`.
 
 ## Manually rebuilding the stack
 
@@ -354,12 +409,19 @@ anywhere.
 ## Size reports and runtime checks
 
 For same-repository PRs, CI tests every published env/platform combination as the non-root
-user (and `gnu13-openmpi4` on x86_64 again under Apptainer, see above): login environment, writable venv, Python dependency consistency, NetCDF round-trip,
-Torch flavor, a two-rank MPI C program, and a Fortran executable. The `-dev` images get the
+user (and `gnu13-openmpi4` on x86_64 again under Apptainer, see above): login environment,
+commands run without a login shell (through `e3sm-env`), writable venv, Python dependency
+consistency, NetCDF round-trip, Torch flavor, two-rank MPI programs in C, Fortran and
+Python (`mpi4py`, checked to be linked against the image's MPI), Python `netCDF4` reading
+files the spack stack wrote, and parallel netCDF/PnetCDF I/O. The `-dev` images get the
 same checks plus their own (`ghci/tests/smoke-dev.sh`): the dev tools and agents on PATH,
 and the ownership of the dirs a dev container mounts onto. Each smoke job uploads an
 `image-size-<tag>-<arch>` artifact with exact bytes, image ID, and layer commands, and the
 run's summary page has one table of every image's compressed and expanded size.
+
+`ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (git
+in a checkout owned by another uid, a Dev Containers uid remap). CI does not smoke-test
+the `-dev` images yet, so it is not run there; run it by hand as its header shows.
 
 The ARM CUDA image currently has one verified upstream packaging defect:
 `nvidia-cusparselt-cu13==0.8.1` has an `aarch64` wheel filename but an internal
