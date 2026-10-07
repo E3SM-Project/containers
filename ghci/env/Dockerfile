@@ -389,8 +389,11 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
 # I/O from Python would need it built against spack's netcdf-c instead.
 RUN . /etc/profile && echo '[ -f /projects/e3sm/software/eamxx-venv/bin/activate ] && source /projects/e3sm/software/eamxx-venv/bin/activate' >> /etc/profile.d/eamxx-env.sh
 
+# No `ENV HOME`: docker, podman and buildah set HOME from /etc/passwd for whichever user
+# runs, which is /home/e3sm for e3sm. Baked into the image, HOME would follow every other
+# user too (root, `--user <uid>` such as a CI runner's), and git then fails reading the
+# unreadable /home/e3sm/.gitconfig.
 USER ${E3SM_USER}
-ENV HOME=/home/${E3SM_USER}
 RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     python3 -m venv /projects/e3sm/software/eamxx-venv && \
     source /projects/e3sm/software/eamxx-venv/bin/activate && \
@@ -402,7 +405,7 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     fi && \
     python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
 
-WORKDIR ${HOME}
+WORKDIR /home/${E3SM_USER}
 
 # Every command the container is started with runs through e3sm-env, so `docker run IMAGE
 # cmake --version`, `apptainer run IMAGE <cmd>`, batch launchers and anything else that hands

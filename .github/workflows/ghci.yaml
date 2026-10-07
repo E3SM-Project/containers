@@ -335,6 +335,17 @@ jobs:
           docker run --rm -e EXPECT_CUDA \
             -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
             "$IMAGE" bash -l /opt/ghci-tests/smoke.sh
+      # As a uid the image doesn't know, the way a CI job runs it with `--user`: HOME must
+      # not be e3sm's, or git fails reading /home/e3sm/.gitconfig. `git config --get` exits
+      # 1 for an unset key and 128 when it cannot read the config.
+      - name: Test running as another user
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" "$IMAGE" bash -c '
+            echo "HOME=$HOME"
+            test "$HOME" != /home/e3sm
+            rc=0; git config --global --get user.name || rc=$?
+            test "$rc" -le 1
+          '
       - uses: actions/upload-artifact@v7
         if: always()
         with:
