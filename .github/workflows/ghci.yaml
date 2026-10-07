@@ -529,9 +529,11 @@ jobs:
   buildcache:
     needs: [changes, suffix, promote]
     # A dev-only change built no env image, so there is nothing new to push.
+    # !cancelled(): without a status function GitHub adds success(), which needs every
+    # ancestor to have succeeded, and on a push to main the build/smoke jobs are skipped.
     if: >-
-      needs.promote.result == 'success' && needs.changes.outputs.env == 'true' &&
-      github.repository_owner == 'E3SM-Project'
+      ${{ !cancelled() && needs.promote.result == 'success' && needs.changes.outputs.env == 'true' &&
+      github.repository_owner == 'E3SM-Project' }}
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
@@ -571,7 +573,7 @@ jobs:
   # images are built with) rather than pulling an image.
   buildcache-index:
     needs: buildcache
-    if: needs.buildcache.result == 'success'
+    if: ${{ !cancelled() && needs.buildcache.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
