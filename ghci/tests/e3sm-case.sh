@@ -60,10 +60,14 @@ done
 
 step "create_test ${tests[*]}"
 mkdir -p "$scratch"
-# --test-id keeps the case directories' names predictable for the logs CI uploads
+# --test-id keeps the case directories' names predictable for the logs CI uploads.
+# --proc-pool: create_test will not start a run with more ranks than its pool, which defaults
+# to the cores plus 25%. The machine oversubscribes, so let the 8-rank runs start on a
+# 4-core runner too (one at a time).
+cores=$(nproc)
 rc=0
 ./create_test "${tests[@]}" "${run_opt[@]}" --wait --test-id e3sm-case \
-    --parallel-jobs "$(nproc)" || rc=$?
+    --parallel-jobs "$cores" --proc-pool "$(( cores > 8 ? cores : 8 ))" || rc=$?
 for status in "$scratch"/*.e3sm-case/TestStatus; do
     echo "-- $status"
     cat "$status"

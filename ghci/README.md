@@ -308,7 +308,9 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   what is missing), baselines in `/projects/e3sm/data/baselines/<compiler>`, cases and
   builds in `~/e3sm_scratch` (`create_test --output-root` changes it).
 - **Cores**: one node of whatever cores the container sees. Tests asking for more ranks
-  than that still run, oversubscribed. Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
+  than that still run, oversubscribed, but `create_test` only starts a run that fits its
+  process pool (the cores plus 25%), so give it room: `create_test SMS_P8... --proc-pool 8`.
+  Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
 - **GPU arch**: the CUDA images build for Hopper (`HOPPER90`) unless `E3SM_KOKKOS_CUDA_ARCH`
   names another Kokkos arch, e.g. `AMPERE80`.
 - **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx -m e3sm-container` uses the
