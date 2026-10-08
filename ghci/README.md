@@ -294,17 +294,17 @@ E3SM's own machine entries (`ghci`, in E3SM's `cime_config/machines`) describe t
 machine these images are built for, and they remain the reference: E3SM's CI uses them, and
 the env images leave CIME exactly as E3SM configures it. As a convenience for running cases
 elsewhere, every image also ships a machine of its own, **`e3sm-container`**, in
-`/etc/e3sm/cime`. It works in any runtime with no `--machine` and no `--hostname` trick, but
-it is only used once you opt in:
+`/projects/e3sm/cime`. It works in any runtime with no `--machine` and no `--hostname`
+trick, but it is only used once you opt in:
 
 - **`-dev` images**: enabled at login, for the image's own `e3sm` user. `~/.cime` gets the
   machine and `CIME_MACHINE=e3sm-container` is exported.
 - **env images, or another `HOME`** (`--user <uid>`, Apptainer, which brings your host
-  `$HOME`): `. /opt/share/e3sm-cime-machine.sh` does the same for the current shell. It
+  `$HOME`): `. /projects/e3sm/cime/enable.sh` does the same for the current shell. It
   never overwrites an existing `~/.cime/config_machines.xml`.
 
 ```bash
-. /opt/share/e3sm-cime-machine.sh   # not needed in the -dev images
+. /projects/e3sm/cime/enable.sh   # not needed in the -dev images
 cd /projects/e3sm/work/E3SM/cime/scripts
 ./create_test SMS_P8_Ln5.ne4pg2_oQU480.F2010 --wait --proc-pool 8
 ./create_newcase --case ~/e3sm_scratch/mycase --compset F2010 --res ne4pg2_oQU480

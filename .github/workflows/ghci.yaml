@@ -194,7 +194,7 @@ jobs:
           bash -n ghci/tests/apptainer.sh
           bash -n ghci/tests/dev-container.sh
           bash -n ghci/tests/e3sm-case.sh
-          sh -n ghci/env/cime/e3sm-cime-machine.sh
+          sh -n ghci/env/cime/enable.sh
       # A malformed file stops every CIME command in the image; the schema itself is checked
       # by e3sm-case.yaml, which needs an E3SM checkout for it.
       - name: Check the CIME machine XML is well-formed
@@ -366,8 +366,8 @@ jobs:
         run: |
           docker run --rm "$IMAGE" bash -c '
             test -z "${CIME_MACHINE:-}" && test ! -e ~/.cime
-            test -f /etc/e3sm/cime/config_machines.xml && test -f /opt/share/e3sm-cime-machine.sh
-            ! grep -q ">@" /etc/e3sm/cime/config_machines.xml
+            test -f /projects/e3sm/cime/config_machines.xml && test -f /projects/e3sm/cime/enable.sh
+            ! grep -q ">@" /projects/e3sm/cime/config_machines.xml
           '
       - uses: actions/upload-artifact@v7
         if: always()

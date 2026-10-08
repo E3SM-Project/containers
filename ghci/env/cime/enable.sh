@@ -1,4 +1,5 @@
-# Opt in to this image's CIME machine, e3sm-container (/etc/e3sm/cime): `. /opt/share/e3sm-cime-machine.sh`
+# Opt in to this image's CIME machine, e3sm-container (the files next to this script):
+#   . /projects/e3sm/cime/enable.sh
 # The -dev images source it at login; the env images only ship it, so nothing changes for
 # CI or downstream images unless they ask.
 #
@@ -10,7 +11,9 @@
 #
 # Sourced from login shells, so it must never fail or print.
 if [ -n "${HOME:-}" ] && [ -w "$HOME" ] && [ ! -e "$HOME/.cime/config_machines.xml" ]; then
-    mkdir -p "$HOME/.cime" 2> /dev/null && cp -n /etc/e3sm/cime/* "$HOME/.cime/" 2> /dev/null
+    mkdir -p "$HOME/.cime" 2> /dev/null &&
+        cp -n /projects/e3sm/cime/config_machines.xml /projects/e3sm/cime/*.cmake \
+            /projects/e3sm/cime/scream_mach_specs.py "$HOME/.cime/" 2> /dev/null
 fi
 if [ -z "${CIME_MACHINE:-}" ] && grep -qs 'MACH="e3sm-container"' "$HOME/.cime/config_machines.xml"; then
     export CIME_MACHINE=e3sm-container

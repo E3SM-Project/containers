@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <!--
   CIME machine entry for this image, so create_newcase/create_test work in any container
-  runtime without a hostname trick. Shipped in /etc/e3sm/cime but not enabled: E3SM's own
-  machine entries (ghci) stay what E3SM's CI uses. /opt/share/e3sm-cime-machine.sh opts in
+  runtime without a hostname trick. Shipped in /projects/e3sm/cime but not enabled: E3SM's
+  own machine entries (ghci) stay what E3SM's CI uses. /projects/e3sm/cime/enable.sh opts in
   (the -dev images do it at login): it copies this file to ~/.cime/config_machines.xml and
   exports CIME_MACHINE=e3sm-container, so no machine probing is involved; an explicit machine
   (in a test name, or create_test and create_newcase's machine option) still wins.

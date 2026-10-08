@@ -382,9 +382,11 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
 # with no --machine and no hostname trick, wherever the image runs. Shipped, NOT enabled:
 # nothing here touches ~/.cime, profile.d or CIME_MACHINE, so CI and downstream images keep
 # using E3SM's own machine entries (`ghci`), which stay the reference for E3SM's CI. Opting in
-# is `. /opt/share/e3sm-cime-machine.sh` (see that script); the -dev images do it at login.
+# is `. /projects/e3sm/cime/enable.sh` (see that script); the -dev images do it at login.
+# Under /projects/e3sm, not /etc: it is project configuration, like the venv next to it.
+# Root's, as the pristine copy: enable.sh copies it to ~/.cime, which is the user's to edit.
 # The compilers and MPI CIME may use are this variant's; the first of each is the default.
-COPY cime/ /etc/e3sm/cime/
+COPY cime/ /projects/e3sm/cime/
 RUN . /etc/profile && \
     case "${COMPILER}:${WITH_CUDA}" in \
       gcc:yes) compilers=gnugpu,gnu ;; \
@@ -393,8 +395,7 @@ RUN . /etc/profile && \
       *) echo "no CIME compiler for COMPILER=${COMPILER}" >&2; exit 1 ;; \
     esac && \
     sed -i -e "s/@COMPILERS@/${compilers}/" -e "s/@MPILIBS@/${MPI_SPEC%%@*},mpi-serial/" \
-        /etc/e3sm/cime/config_machines.xml && \
-    mv /etc/e3sm/cime/e3sm-cime-machine.sh /opt/share/e3sm-cime-machine.sh
+        /projects/e3sm/cime/config_machines.xml
 
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.

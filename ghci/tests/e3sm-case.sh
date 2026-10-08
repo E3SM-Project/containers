@@ -31,7 +31,7 @@ step "CIME machine"
 # The env images ship the machine without enabling it (the -dev images enable it at login);
 # opt in the way a user would.
 # shellcheck source=/dev/null
-. /opt/share/e3sm-cime-machine.sh
+. /projects/e3sm/cime/enable.sh
 test "${CIME_MACHINE:-}" = e3sm-container || { echo "CIME_MACHINE is '${CIME_MACHINE:-}', not e3sm-container" >&2; exit 1; }
 # The variant's default compiler: the first one the machine lists
 compiler=$(sed -n 's:.*<COMPILERS>\([^,<]*\).*:\1:p' "$HOME/.cime/config_machines.xml")
