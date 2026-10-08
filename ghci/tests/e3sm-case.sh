@@ -78,9 +78,22 @@ if [ "$BUILD_ONLY" = yes ]; then
     step "EAMxx standalone tests skipped (build only)"
 else
     step "test-all-eamxx -m e3sm-container -t sp"
-    # No baselines: -b is left out, which skips every baseline comparison
-    "$src/components/eamxx/scripts/test-all-eamxx" -m e3sm-container -t sp \
-        -w "$scratch/eamxx-ctest"
+    # No baselines: -b is left out, which skips every baseline comparison. The output is
+    # also kept in eamxx-ctest.log, for CI to upload with ctest's own logs.
+    # EAMxx downloads its test inputs while configuring, and the inputdata server sometimes
+    # refuses a connection ("Could not connect to repo"). Such a configure failure is retried:
+    # what was already downloaded stays, so each attempt needs less. Anything else fails.
+    for attempt in 1 2 3; do
+        rc=0
+        "$src/components/eamxx/scripts/test-all-eamxx" -m e3sm-container -t sp \
+            -w "$scratch/eamxx-ctest" 2>&1 | tee "$scratch/eamxx-ctest.log" || rc=$?
+        [ "$rc" -eq 0 ] && break
+        grep -q 'failed at config time' "$scratch/eamxx-ctest.log" &&
+            grep -q 'Could not connect to repo' "$scratch/eamxx-ctest.log" &&
+            [ "$attempt" -lt 3 ] || exit "$rc"
+        echo "inputdata server unreachable while configuring; retrying in $((attempt * 60)) s" >&2
+        sleep $((attempt * 60))
+    done
 fi
 
 echo "E3SM cases passed"

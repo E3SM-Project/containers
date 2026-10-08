@@ -147,6 +147,7 @@ jobs:
             scratch/*.e3sm-case/*.log*
             scratch/*.e3sm-case/bld/*.bldlog.*
             scratch/*.e3sm-case/run/*.log.*
-            scratch/eamxx-ctest/*/Testing/Temporary/LastTest*.log
+            scratch/eamxx-ctest.log
+            scratch/eamxx-ctest/*/Testing/Temporary/Last*.log
           if-no-files-found: warn
           retention-days: 14
