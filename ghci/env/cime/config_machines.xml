@@ -1,13 +1,14 @@
 <?xml version="1.0"?>
 <!--
-  CIME machine entry for this image, installed as ~/.cime/config_machines.xml so
-  create_newcase/create_test work in any container runtime without a hostname trick or an
-  E3SM-side machine entry. profile.d exports CIME_MACHINE=e3sm-container when this file is
-  in $HOME/.cime, so no machine probing is involved; an explicit machine (in a test name, or
-  create_test and create_newcase's machine option) still wins.
+  CIME machine entry for this image, so create_newcase/create_test work in any container
+  runtime without a hostname trick. Shipped in /etc/e3sm/cime but not enabled: E3SM's own
+  machine entries (ghci) stay what E3SM's CI uses. /opt/share/e3sm-cime-machine.sh opts in
+  (the -dev images do it at login): it copies this file to ~/.cime/config_machines.xml and
+  exports CIME_MACHINE=e3sm-container, so no machine probing is involved; an explicit machine
+  (in a test name, or create_test and create_newcase's machine option) still wins.
 
   Paths come from the environment the login profile sets up (spack's *_ROOT variables), so
-  nothing here is specific to one variant. The build fills in @COMPILERS@ and @MPILIBS@ from
+  nothing here is specific to one variant. The build fills in the COMPILERS and MPILIBS from
   the image's build args (see ghci/env/Dockerfile); the first of each is CIME's default.
 -->
 <config_machines version="2.0">

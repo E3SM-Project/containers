@@ -20,6 +20,10 @@ done
 node --version
 gh --version | sed -n 1p
 
+step "CIME machine enabled at login"
+test "${CIME_MACHINE:-}" = e3sm-container
+grep -q 'MACH="e3sm-container"' "$HOME/.cime/config_machines.xml"
+
 step "coding agents"
 # --version only: no network, no login.
 for agent in claude opencode codex copilot; do

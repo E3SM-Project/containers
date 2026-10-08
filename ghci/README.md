@@ -290,20 +290,30 @@ aarch64).
 
 ## Running E3SM (CIME)
 
-Every image carries its own CIME machine, **`e3sm-container`**, in `~/.cime`, and the login
-environment exports `CIME_MACHINE=e3sm-container`. So in any runtime, with no `--machine`
-and no `--hostname` trick:
+E3SM's own machine entries (`ghci`, in E3SM's `cime_config/machines`) describe the CI
+machine these images are built for, and they remain the reference: E3SM's CI uses them, and
+the env images leave CIME exactly as E3SM configures it. As a convenience for running cases
+elsewhere, every image also ships a machine of its own, **`e3sm-container`**, in
+`/etc/e3sm/cime`. It works in any runtime with no `--machine` and no `--hostname` trick, but
+it is only used once you opt in:
+
+- **`-dev` images**: enabled at login, for the image's own `e3sm` user. `~/.cime` gets the
+  machine and `CIME_MACHINE=e3sm-container` is exported.
+- **env images, or another `HOME`** (`--user <uid>`, Apptainer, which brings your host
+  `$HOME`): `. /opt/share/e3sm-cime-machine.sh` does the same for the current shell. It
+  never overwrites an existing `~/.cime/config_machines.xml`.
 
 ```bash
+. /opt/share/e3sm-cime-machine.sh   # not needed in the -dev images
 cd /projects/e3sm/work/E3SM/cime/scripts
-./create_test SMS_P8_Ln5.ne4pg2_oQU480.F2010 --wait
+./create_test SMS_P8_Ln5.ne4pg2_oQU480.F2010 --wait --proc-pool 8
 ./create_newcase --case ~/e3sm_scratch/mycase --compset F2010 --res ne4pg2_oQU480
 ```
 
 - **Which compiler and MPI**: the image's own; a CUDA image defaults to `gnugpu` and can
   also build for the CPU with `--compiler gnu`. `query_config --machines e3sm-container`
   lists them. (`query_config --machines current` guesses from the hostname instead, and a
-  docker hostname matches E3SM's `ghci-snl`.)
+  docker hostname matches E3SM's `ghci`.)
 - **Where things go**: inputdata in `/projects/e3sm/data/inputdata` (mount it; CIME downloads
   what is missing), baselines in `/projects/e3sm/data/baselines/<compiler>`, cases and
   builds in `~/e3sm_scratch` (`create_test --output-root` changes it).
@@ -315,13 +325,9 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   names another Kokkos arch, e.g. `AMPERE80`.
 - **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx -m e3sm-container` uses the
   same machine (`~/.cime/scream_mach_specs.py`).
-- **Another user or HOME**: CIME reads machines only from `$HOME/.cime`, and the files are in
-  `e3sm`'s home. Anyone else (`--user <uid>`, Apptainer, which brings your host `$HOME`)
-  gets CIME's usual behavior -- no `CIME_MACHINE` -- until they copy the pristine set in:
-  `mkdir -p ~/.cime && cp /etc/e3sm/cime/* ~/.cime/`, then log in again.
-- **Your own settings win**: an explicit machine (in a test name, `--machine`, or your own
-  `CIME_MACHINE`) is used as before, so E3SM's `ghci-snl` entries still work in these images.
-  `~/.cime` is yours to edit.
+- **Explicit machines win**: a machine in a test name, `--machine`, or a `CIME_MACHINE` you
+  set yourself is used as before, so E3SM's `ghci` entries work in every image, opted in or
+  not. `~/.cime` is yours to edit.
 
 CI checks this with `ghci/tests/e3sm-case.sh` (`.github/workflows/e3sm-case.yaml`):
 nightly against the published images and E3SM master, and on PRs that change the machine.

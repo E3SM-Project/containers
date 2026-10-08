@@ -148,6 +148,13 @@ RUN printf '%s\n' \
       'sudo chown -R -h "$uid:$gid" "$venv"' > /usr/local/bin/e3sm-fix-ownership && \
     chmod 0755 /usr/local/bin/e3sm-fix-ownership
 
+# The image's CIME machine (see /opt/share/e3sm-cime-machine.sh), so create_newcase and
+# create_test need no --machine in a dev container. Only in e3sm's own home: a foreign HOME
+# (Apptainer brings the host's) is never written to; source the script there to opt in.
+RUN printf '%s\n' \
+    'if [ "$HOME" = "/home/${E3SM_USER:-e3sm}" ]; then . /opt/share/e3sm-cime-machine.sh; fi' \
+    > /etc/profile.d/e3sm-cime-machine.sh
+
 # Where the per-user installers below put their binaries
 RUN printf '%s\n' \
     'export PATH=$HOME/.local/bin:$HOME/.opencode/bin:$PATH' > /etc/profile.d/user-tools.sh

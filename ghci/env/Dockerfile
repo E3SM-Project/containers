@@ -378,13 +378,11 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
       echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env
 
-# 16. CIME machine "e3sm-container", so create_newcase/create_test (and test-all-eamxx) work
-# with no --machine, no hostname trick and no machine entry in E3SM. CIME reads user machines
-# only from ~/.cime, so the files go to e3sm's home, as e3sm's to edit; /etc/e3sm/cime keeps
-# the pristine copy for any other HOME (`cp /etc/e3sm/cime/* ~/.cime/`). profile.d sets
-# CIME_MACHINE only when the machine is in this HOME's ~/.cime, so a user without it (a CI
-# runner's uid, Apptainer's host HOME) sees CIME behave as before, and never a machine name
-# CIME cannot find. An explicit machine (test name, --machine, CIME_MACHINE) still wins.
+# 16. CIME machine "e3sm-container", for create_newcase/create_test (and test-all-eamxx)
+# with no --machine and no hostname trick, wherever the image runs. Shipped, NOT enabled:
+# nothing here touches ~/.cime, profile.d or CIME_MACHINE, so CI and downstream images keep
+# using E3SM's own machine entries (`ghci`), which stay the reference for E3SM's CI. Opting in
+# is `. /opt/share/e3sm-cime-machine.sh` (see that script); the -dev images do it at login.
 # The compilers and MPI CIME may use are this variant's; the first of each is the default.
 COPY cime/ /etc/e3sm/cime/
 RUN . /etc/profile && \
@@ -396,13 +394,7 @@ RUN . /etc/profile && \
     esac && \
     sed -i -e "s/@COMPILERS@/${compilers}/" -e "s/@MPILIBS@/${MPI_SPEC%%@*},mpi-serial/" \
         /etc/e3sm/cime/config_machines.xml && \
-    install -d -o ${USERNAME} -g ${USERNAME} /home/${USERNAME}/.cime && \
-    install -o ${USERNAME} -g ${USERNAME} -m 0644 /etc/e3sm/cime/* /home/${USERNAME}/.cime/ && \
-    printf '%s\n' \
-      '# CIME machine for this image (see /etc/e3sm/cime), if this HOME has it' \
-      'if [ -z "${CIME_MACHINE:-}" ] && grep -qs '"'"'MACH="e3sm-container"'"'"' "$HOME/.cime/config_machines.xml"; then' \
-      '  export CIME_MACHINE=e3sm-container' \
-      'fi' > /etc/profile.d/cime-machine.sh
+    mv /etc/e3sm/cime/e3sm-cime-machine.sh /opt/share/e3sm-cime-machine.sh
 
 # 17. Python venv, created and populated as the runtime user: doing this under root and
 # later recursively changing ownership duplicates the complete environment in a new layer.

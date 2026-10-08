@@ -131,8 +131,9 @@ jobs:
           du -sh inputdata
           exit "$rc"
       - name: Save inputdata
-        # Only from a passing job, so the cache never keeps a half-finished download
-        if: steps.inputdata.outputs.cache-hit != 'true'
+        # Only from a passing job that ran the cases, so the cache never keeps a half-finished
+        # download: a build-only (CUDA) job fetches next to nothing, and often finishes first.
+        if: steps.inputdata.outputs.cache-hit != 'true' && env.BUILD_ONLY != 'yes'
         uses: actions/cache/save@v6
         with:
           path: inputdata

@@ -84,8 +84,8 @@
     "CCACHE_MAXSIZE": "20G"
   },
 
-  // No --hostname or --machine needed for CIME: the image carries its own machine,
-  // e3sm-container, in ~/.cime and exports CIME_MACHINE (see the README).
+  // No --hostname or --machine needed for CIME: the -dev images enable their own machine,
+  // e3sm-container, at login (~/.cime and CIME_MACHINE; see the README).
 
   // Lifecycle hooks run under `sh -c`, which is NOT a login shell, so wrap anything that
   // needs the toolchain. `e3sm-env` in these images does exactly that.

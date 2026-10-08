@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build and run a few small E3SM cases in the image, with the image's own CIME machine
-# (e3sm-container, from ~/.cime) and nothing else: no --machine, no hostname trick, no
-# machine entry in E3SM. The smoke tests prove the toolchain; this proves E3SM builds and
-# runs on it. Run as the image's default user, under a login shell, with an E3SM checkout
-# (submodules included) at /projects/e3sm/work/E3SM:
+# (e3sm-container, opted into below) and nothing else: no --machine, no hostname trick. The
+# smoke tests prove the toolchain; this proves E3SM builds and runs on it. Run as the image's
+# default user, under a login shell, with an E3SM checkout (submodules included) at
+# /projects/e3sm/work/E3SM:
 # docker run --rm -e BUILD_ONLY=no \
 #   -v /path/to/E3SM:/projects/e3sm/work/E3SM \
 #   -v /path/to/inputdata:/projects/e3sm/data/inputdata \
@@ -28,6 +28,10 @@ scratch="$HOME/e3sm_scratch"
 step() { echo "== $*"; }
 
 step "CIME machine"
+# The env images ship the machine without enabling it (the -dev images enable it at login);
+# opt in the way a user would.
+# shellcheck source=/dev/null
+. /opt/share/e3sm-cime-machine.sh
 test "${CIME_MACHINE:-}" = e3sm-container || { echo "CIME_MACHINE is '${CIME_MACHINE:-}', not e3sm-container" >&2; exit 1; }
 # The variant's default compiler: the first one the machine lists
 compiler=$(sed -n 's:.*<COMPILERS>\([^,<]*\).*:\1:p' "$HOME/.cime/config_machines.xml")
@@ -68,10 +72,13 @@ cores=$(nproc)
 rc=0
 ./create_test "${tests[@]}" "${run_opt[@]}" --wait --test-id e3sm-case \
     --parallel-jobs "$cores" --proc-pool "$(( cores > 8 ? cores : 8 ))" || rc=$?
+# No case directory at all if create_test failed early: then there is nothing to show
+shopt -s nullglob
 for status in "$scratch"/*.e3sm-case/TestStatus; do
     echo "-- $status"
     cat "$status"
 done
+shopt -u nullglob
 [ "$rc" -eq 0 ] || { echo "create_test failed ($rc)" >&2; exit "$rc"; }
 
 if [ "$BUILD_ONLY" = yes ]; then
