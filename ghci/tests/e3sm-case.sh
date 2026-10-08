@@ -44,11 +44,13 @@ tests=(
 run_opt=()
 [ "$BUILD_ONLY" = yes ] && run_opt=(--no-run)
 
-# Files E3SM opens without listing them as inputdata, so CIME never downloads them and the
-# run dies on a missing file (#31). EAM's P3 builds this path in micro_p3.F90.
-step "inputdata CIME does not know about"
+# Files E3SM opens without asking for them, so nothing downloads them and the test dies on a
+# missing file (#31): EAM's P3 builds the lookup table's path in micro_p3.F90, and EAMxx's
+# spa standalone test fetches the ne4 SPA file while its input.yaml reads the ne2 one.
+step "inputdata E3SM does not ask for"
 inputdata=/projects/e3sm/data/inputdata
-for f in atm/cam/physprops/p3_lookup_table_1.dat-v4.1.2; do
+for f in atm/cam/physprops/p3_lookup_table_1.dat-v4.1.2 \
+         atm/scream/init/spa_file_unified_and_complete_ne2np4L72_20231222.nc; do
     [ -f "$inputdata/$f" ] && continue
     mkdir -p "$(dirname "$inputdata/$f")"
     curl -fsSL -o "$inputdata/$f.part" "https://web.lcrc.anl.gov/public/e3sm/inputdata/$f"
