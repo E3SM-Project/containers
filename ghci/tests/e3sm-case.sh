@@ -77,7 +77,12 @@ done
 if [ "$BUILD_ONLY" = yes ]; then
     step "EAMxx standalone tests skipped (build only)"
 else
-    step "test-all-eamxx -m e3sm-container -t sp"
+    # The build type E3SM's own CI uses for this compiler: single precision with gnu, opt
+    # (double) with intel, where the single-precision build is untested upstream and does
+    # not compile (ambiguous float/double calls that icpx rejects).
+    eamxx_test=sp
+    [ "$compiler" = intel ] && eamxx_test=opt
+    step "test-all-eamxx -m e3sm-container -t $eamxx_test"
     # No baselines: -b is left out, which skips every baseline comparison. The output is
     # also kept in eamxx-ctest.log, for CI to upload with ctest's own logs.
     # EAMxx downloads its test inputs while configuring, and the inputdata server sometimes
@@ -85,7 +90,7 @@ else
     # what was already downloaded stays, so each attempt needs less. Anything else fails.
     for attempt in 1 2 3; do
         rc=0
-        "$src/components/eamxx/scripts/test-all-eamxx" -m e3sm-container -t sp \
+        "$src/components/eamxx/scripts/test-all-eamxx" -m e3sm-container -t "$eamxx_test" \
             -w "$scratch/eamxx-ctest" 2>&1 | tee "$scratch/eamxx-ctest.log" || rc=$?
         [ "$rc" -eq 0 ] && break
         grep -q 'failed at config time' "$scratch/eamxx-ctest.log" &&

@@ -327,8 +327,9 @@ CI checks this with `ghci/tests/e3sm-case.sh` (`.github/workflows/e3sm-case.yaml
 nightly against the published images and E3SM master, and on PRs that change the machine.
 It builds and runs `SMS_Vmoab_P8_Ln5.ne4pg2_oQU480.WCYCL2010NS` and
 `SMS_P8_Ln5.ne4_ne4.F2000-SCREAMv1-AQP1` (`eamxx-L72` testmod), then the EAMxx standalone
-`-t sp` tests; the CUDA images only build the cases (CI has no GPU). To run it locally
-against your own checkout, see the script's header.
+tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does); the CUDA images only
+build the cases (CI has no GPU). To run it locally against your own checkout, see the
+script's header.
 
 ## Python environment & custom packages
 
