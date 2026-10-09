@@ -121,8 +121,9 @@ else
         "$src/components/eamxx/scripts/test-all-eamxx" -m e3sm-container -t "$eamxx_test" \
             -w "$scratch/eamxx-ctest" 2>&1 | tee "$scratch/eamxx-ctest.log" || rc=$?
         [ "$rc" -eq 0 ] && break
-        grep -q 'failed at config time' "$scratch/eamxx-ctest.log" &&
-            grep -q 'Could not connect to repo' "$scratch/eamxx-ctest.log" &&
+        # CMake wraps the message, so match it with the line breaks folded into spaces
+        log=$(tr -s ' \n' '  ' < "$scratch/eamxx-ctest.log")
+        [[ $log == *"failed at config time"* && $log == *"Could not connect to repo"* ]] &&
             [ "$attempt" -lt 3 ] || exit "$rc"
         echo "inputdata server unreachable while configuring; retrying in $((attempt * 60)) s" >&2
         sleep $((attempt * 60))
