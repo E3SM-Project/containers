@@ -330,12 +330,14 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   not. `~/.cime` is yours to edit.
 
 CI checks this with `ghci/tests/e3sm-case.sh` (`.github/workflows/e3sm-case.yaml`):
-nightly against the published images and E3SM master, and on PRs that change the machine.
-It builds and runs `SMS_Vmoab_P8_Ln5.ne4pg2_oQU480.WCYCL2010NS` and
-`SMS_P8_Ln5.ne4_ne4.F2000-SCREAMv1-AQP1` (`eamxx-L72` testmod), then the EAMxx standalone
-tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does); the CUDA images only
-build the cases (CI has no GPU). To run it locally against your own checkout, see the
-script's header.
+weekly against the published images and E3SM master, on PRs that change the machine, and
+by hand against any image suffix and E3SM branch, tag or sha. Each image runs three jobs
+side by side: `SMS_Vmoab_P8_Ln5.ne4pg2_oQU480.WCYCL2010NS`,
+`SMS_P8_Ln5.ne4_ne4.F2000-SCREAMv1-AQP1` (`eamxx-L72` testmod), and the EAMxx standalone
+tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does). The CUDA images only build
+the two cases (CI has no GPU). Each job's summary names the E3SM commit and image digest it
+tested. To run it locally against your own checkout, see the script's header (`CASES`
+picks a subset).
 
 ## Python environment & custom packages
 

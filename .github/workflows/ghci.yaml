@@ -477,7 +477,7 @@ jobs:
   # Build and run small E3SM cases (e3sm-case.yaml) when a same-repo PR changes the image's
   # CIME machine or that test: in the images this run just built and smoke-tested, or in the
   # published ones when the PR rebuilt none (a change to e3sm-case.yaml alone). It also runs
-  # nightly on its own. Deliberately NOT in `required-check` or `promote`'s needs: E3SM
+  # weekly on its own. Deliberately NOT in `required-check` or `promote`'s needs: E3SM
   # master moves on its own, and a breakage there must not block this repo's merges.
   e3sm-case:
     needs: [changes, suffix, smoke]
