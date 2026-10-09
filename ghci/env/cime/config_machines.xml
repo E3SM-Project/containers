@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!--
+  CIME machine entry for this image, so create_newcase/create_test work in any container
+  runtime without a hostname trick. Shipped in /projects/e3sm/cime but not enabled: E3SM's
+  own machine entries (ghci) stay what E3SM's CI uses. /projects/e3sm/cime/enable.sh opts in
+  (the -dev images do it at login): it copies this file to ~/.cime/config_machines.xml and
+  exports CIME_MACHINE=e3sm-container, so no machine probing is involved; an explicit machine
+  (in a test name, or create_test and create_newcase's machine option) still wins.
+
+  Paths come from the environment the login profile sets up (spack's *_ROOT variables), so
+  nothing here is specific to one variant. The build fills in the COMPILERS and MPILIBS from
+  the image's build args (see ghci/env/Dockerfile); the first of each is CIME's default.
+-->
+<config_machines version="2.0">
+  <machine MACH="e3sm-container">
+    <DESC>E3SM container image (ghcr.io/e3sm-project/e3sm-image), any runtime and host</DESC>
+    <OS>LINUX</OS>
+    <COMPILERS>@COMPILERS@</COMPILERS>
+    <MPILIBS>@MPILIBS@</MPILIBS>
+    <!-- Under $HOME rather than /projects/e3sm: it must be writable wherever the image
+         runs, and Apptainer images are read-only. create_test's output-root overrides it. -->
+    <CIME_OUTPUT_ROOT>$ENV{HOME}/e3sm_scratch</CIME_OUTPUT_ROOT>
+    <DIN_LOC_ROOT>/projects/e3sm/data/inputdata</DIN_LOC_ROOT>
+    <DIN_LOC_ROOT_CLMFORC>/projects/e3sm/data/inputdata/atm/datm7</DIN_LOC_ROOT_CLMFORC>
+    <DOUT_S_ROOT>$CIME_OUTPUT_ROOT/archive/$CASE</DOUT_S_ROOT>
+    <BASELINE_ROOT>/projects/e3sm/data/baselines/$COMPILER</BASELINE_ROOT>
+    <!-- No CCSM_CPRNC: the image has none, and CIME builds its own for a test that needs it. -->
+    <!-- A number, not $SHELL{nproc}: the schema wants an integer. create_test sizes each
+         build from its parallel-jobs option; for a case, ./xmlchange GMAKE_J=N. -->
+    <GMAKE_J>8</GMAKE_J>
+    <TESTS>e3sm_developer</TESTS>
+    <BATCH_SYSTEM>none</BATCH_SYSTEM>
+    <SUPPORTED_BY>github.com/E3SM-Project/containers</SUPPORTED_BY>
+    <!-- One node: whatever cores the container sees. A test asking for more ranks than
+         that (_P8 on a 4-core runner) still runs, oversubscribed (see mpirun below). -->
+    <MAX_TASKS_PER_NODE>$SHELL{nproc}</MAX_TASKS_PER_NODE>
+    <MAX_MPITASKS_PER_NODE>$SHELL{nproc}</MAX_MPITASKS_PER_NODE>
+    <MAX_MPITASKS_PER_NODE compiler="gnugpu">2</MAX_MPITASKS_PER_NODE>
+    <!-- Open MPI refuses more ranks than cores unless told; MPICH oversubscribes as is. -->
+    <mpirun mpilib="openmpi">
+      <executable>mpirun</executable>
+      <arguments>
+        <arg name="oversubscribe"> --oversubscribe</arg>
+        <arg name="num_tasks"> -np {{ total_tasks }}</arg>
+      </arguments>
+    </mpirun>
+    <mpirun mpilib="mpich">
+      <executable>mpirun</executable>
+      <arguments>
+        <arg name="num_tasks"> -np {{ total_tasks }}</arg>
+      </arguments>
+    </mpirun>
+    <mpirun mpilib="mpi-serial">
+      <executable/>
+    </mpirun>
+    <!-- The login profile has already loaded every module; CIME has nothing to load. -->
+    <module_system type="none"/>
+    <RUNDIR>$CIME_OUTPUT_ROOT/$CASE/run</RUNDIR>
+    <EXEROOT>$CIME_OUTPUT_ROOT/$CASE/bld</EXEROOT>
+    <MAX_GB_OLD_TEST_DATA>0</MAX_GB_OLD_TEST_DATA>
+    <environment_variables>
+      <env name="NETCDF_C_PATH">$ENV{NETCDF_C_ROOT}</env>
+      <env name="NETCDF_FORTRAN_PATH">$ENV{NETCDF_FORTRAN_ROOT}</env>
+      <env name="OMP_STACKSIZE">64M</env>
+      <!-- No OMP_PROC_BIND/OMP_PLACES: without mpirun binding each rank to its own cores
+           (which needs a known topology, and fails oversubscribed), every rank's OpenMP
+           runtime binds itself to the first place, and all ranks share core 0. -->
+      <env name="GATOR_INITIAL_MB">4000MB</env>
+    </environment_variables>
+    <environment_variables mpilib="!mpi-serial">
+      <env name="PNETCDF_PATH">$ENV{PARALLEL_NETCDF_ROOT}</env>
+    </environment_variables>
+    <environment_variables compiler="gnu">
+      <env name="BLA_VENDOR">OpenBLAS</env>
+    </environment_variables>
+    <environment_variables compiler="gnugpu">
+      <env name="BLA_VENDOR">OpenBLAS</env>
+    </environment_variables>
+    <environment_variables compiler="intel">
+      <env name="BLA_VENDOR">Intel10_64lp</env>
+    </environment_variables>
+    <resource_limits>
+      <resource name="RLIMIT_STACK">-1</resource>
+    </resource_limits>
+  </machine>
+</config_machines>

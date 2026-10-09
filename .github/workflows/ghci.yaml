@@ -51,6 +51,7 @@ jobs:
     outputs:
       env: ${{ steps.filter.outputs.env || steps.force.outputs.env }}
       dev: ${{ steps.filter.outputs.dev || steps.force.outputs.dev }}
+      cime: ${{ steps.filter.outputs.cime }}
       relevant: ${{ steps.filter.outputs.env == 'true' || steps.filter.outputs.dev == 'true' || steps.force.outputs.env == 'true' }}
     steps:
       - uses: actions/checkout@v7
@@ -68,6 +69,11 @@ jobs:
               - 'scripts/image-size.py'
             dev:
               - 'ghci/dev/Dockerfile'
+            # What e3sm-case.yaml checks: the image's CIME machine, and the test itself
+            cime:
+              - 'ghci/env/cime/**'
+              - 'ghci/tests/e3sm-case.sh'
+              - '.github/workflows/e3sm-case.yaml'
       - id: force
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: |
@@ -187,6 +193,12 @@ jobs:
           bash -n ghci/tests/smoke-dev.sh
           bash -n ghci/tests/apptainer.sh
           bash -n ghci/tests/dev-container.sh
+          bash -n ghci/tests/e3sm-case.sh
+          sh -n ghci/env/cime/enable.sh
+      # A malformed file stops every CIME command in the image; the schema itself is checked
+      # by e3sm-case.yaml, which needs an E3SM checkout for it.
+      - name: Check the CIME machine XML is well-formed
+        run: python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' ghci/env/cime/config_machines.xml
       - name: Test Python dependency-check guard
         run: python3 -m unittest discover -s ghci/tests -p 'test_*.py' -v
       # cleanup-ghcr-packages.yaml deletes package versions on a schedule; its selection logic
@@ -348,6 +360,15 @@ jobs:
             test "$rc" -le 1
             mkdir /projects/e3sm/data/inputdata && rmdir /projects/e3sm/data/inputdata
           '
+      # The env image ships its CIME machine without enabling it: CI and downstream images
+      # must see CIME exactly as E3SM configures it, unless they opt in.
+      - name: Test the CIME machine is shipped but not enabled
+        run: |
+          docker run --rm "$IMAGE" bash -c '
+            test -z "${CIME_MACHINE:-}" && test ! -e ~/.cime
+            test -f /projects/e3sm/cime/config_machines.xml && test -f /projects/e3sm/cime/enable.sh
+            ! grep -q ">@" /projects/e3sm/cime/config_machines.xml
+          '
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -452,6 +473,25 @@ jobs:
           apptainer --version
       - name: Test under Apptainer
         run: EXPECT_CUDA=no ghci/tests/apptainer.sh "docker://${IMAGE,,}"
+
+  # Build and run small E3SM cases (e3sm-case.yaml) when a same-repo PR changes the image's
+  # CIME machine or that test: in the images this run just built and smoke-tested, or in the
+  # published ones when the PR rebuilt none (a change to e3sm-case.yaml alone). It also runs
+  # weekly on its own. Deliberately NOT in `required-check` or `promote`'s needs: E3SM
+  # master moves on its own, and a breakage there must not block this repo's merges.
+  e3sm-case:
+    needs: [changes, suffix, smoke]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changes.outputs.cime == 'true'
+      && (needs.smoke.result == 'success' || (needs.smoke.result == 'skipped' && needs.changes.outputs.env != 'true')) }}
+    uses: ./.github/workflows/e3sm-case.yaml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      suffix: ${{ needs.changes.outputs.env == 'true' && needs.suffix.outputs.value || '' }}
 
   # Publish the tags people pull (gnu13-openmpi4, ..., gnu13-openmpi4-<version> for a ghci-*
   # tag) only by retagging the exact multi-arch images that were tested, never by a build. On a

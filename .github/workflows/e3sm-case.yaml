@@ -1,0 +1,168 @@
+name: e3sm-case
+
+# Builds and runs a few small E3SM cases in each image (ghci/tests/e3sm-case.sh), with the
+# image's own CIME machine. The smoke tests in ghci.yaml prove the toolchain works; this
+# proves E3SM itself builds and runs on it, ahead of E3SM's own CI picking the images up.
+#
+# - weekly, against the published tags and E3SM master: catches an E3SM or CIME change that
+#   breaks how the images package their machine (or the reverse) before a user reports it.
+#   Such changes are rare, and a week is enough time to respond;
+# - from ghci.yaml, against a PR's freshly built images, when the PR touches the CIME
+#   machine or this test;
+# - by hand (workflow_dispatch) against any suffix and E3SM ref (branch, tag or sha).
+#
+# Not part of ghci.yaml's required-check or promote: E3SM master moves independently of
+# this repo, and an E3SM-side breakage must not block merging or publishing image fixes.
+on:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      suffix:
+        description: 'Image tag suffix: empty for the published tags, or -pr-<N>, -rc-<run_id>, -<version>'
+        required: false
+        type: string
+        default: ''
+      e3sm_ref:
+        description: 'E3SM-Project/E3SM branch, tag or sha'
+        required: false
+        type: string
+        default: master
+  workflow_call:
+    inputs:
+      suffix:
+        required: false
+        type: string
+        default: ''
+      e3sm_ref:
+        required: false
+        type: string
+        default: master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.suffix || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  case:
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      # ghci.yaml's per-arch variant list, times the cases in e3sm-case.sh, one job each so
+      # they run side by side: the coupled MOAB case, the EAMxx (SCREAM) case, and EAMxx's
+      # standalone tests. The CUDA images only build the two cases (hosted runners have no
+      # GPU), so they skip the standalone tests.
+      matrix:
+        env: [gnu13-openmpi4, gnu13-mpich4-cuda, intel2024-openmpi4]
+        arch: [x86_64, aarch64]
+        case: [wcycl, aqp, eamxx]
+        exclude:
+          - env: intel2024-openmpi4
+            arch: aarch64
+          - env: gnu13-mpich4-cuda
+            case: eamxx
+    name: e3sm-case (${{ matrix.env }}, ${{ matrix.arch }}, ${{ matrix.case }})
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ inputs.suffix }}
+      BUILD_ONLY: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      CASES: ${{ matrix.case }}
+    steps:
+      # Hosted runners start with ~20 GB free; the image (up to ~15 GB expanded for CUDA),
+      # E3SM with submodules and a case build need more. These are preinstalled SDKs
+      # nothing here uses.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/local/.ghcup /usr/share/swift
+          sudo docker image prune --all --force > /dev/null
+          df -h /
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check out E3SM
+        uses: actions/checkout@v7
+        with:
+          repository: E3SM-Project/E3SM
+          ref: ${{ inputs.e3sm_ref || 'master' }}
+          path: E3SM
+          submodules: recursive
+          show-progress: false
+          persist-credentials: false
+      # One cache per case, shared by every variant and arch (inputdata does not depend on
+      # either). The key changes with the test list; a miss restores the newest older one,
+      # the case downloads only what that lacks, and the first job to pass saves the result.
+      - name: Restore inputdata
+        id: inputdata
+        uses: actions/cache/restore@v6
+        with:
+          path: inputdata
+          key: e3sm-inputdata-${{ matrix.case }}-${{ hashFiles('ghci/tests/e3sm-case.sh') }}
+          restore-keys: e3sm-inputdata-${{ matrix.case }}-
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull the image
+        run: |
+          echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+          docker pull "${IMAGE,,}"
+      # As the image's default user (uid 1000), whose home the script opts into the image's
+      # CIME machine. The runner's own uid is 1001, so hand it what the case writes to, and
+      # take it back after for the cache and the log upload.
+      - name: Build and run the case
+        run: |
+          mkdir -p inputdata scratch
+          sudo chown -R 1000:1000 E3SM inputdata scratch
+          rc=0
+          docker run --rm -e BUILD_ONLY -e CASES \
+            -v "$PWD/E3SM:/projects/e3sm/work/E3SM" \
+            -v "$PWD/inputdata:/projects/e3sm/data/inputdata" \
+            -v "$PWD/scratch:/home/e3sm/e3sm_scratch" \
+            -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
+            "$IMAGE" bash -l /opt/ghci-tests/e3sm-case.sh || rc=$?
+          sudo chown -R "$(id -u):$(id -g)" E3SM inputdata scratch
+          {
+            echo "### ${{ matrix.env }} (${{ matrix.arch }}), ${{ matrix.case }}"
+            echo
+            # Which E3SM this tested, so a scheduled failure can be traced to a commit
+            echo "E3SM \`$(git -C E3SM rev-parse --short HEAD)\` ($(git -C E3SM log -1 --format=%cs)), image \`$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")\`"
+            echo
+            echo '```'
+            if [ "$CASES" = eamxx ]; then
+              grep -E 'tests passed|tests failed|OVERALL STATUS' scratch/eamxx-ctest.log 2>/dev/null || echo "no ctest summary"
+            else
+              cat scratch/*.e3sm-case/TestStatus 2>/dev/null || echo "no TestStatus"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          du -sh inputdata
+          exit "$rc"
+      - name: Save inputdata
+        # Only from a passing job that ran its case, so the cache never keeps a half-finished
+        # download: a build-only (CUDA) job fetches next to nothing.
+        if: steps.inputdata.outputs.cache-hit != 'true' && env.BUILD_ONLY != 'yes'
+        uses: actions/cache/save@v6
+        with:
+          path: inputdata
+          key: ${{ steps.inputdata.outputs.cache-primary-key }}
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e3sm-case-${{ matrix.env }}-${{ matrix.arch }}-${{ matrix.case }}
+          path: |
+            scratch/*.e3sm-case/TestStatus*
+            scratch/*.e3sm-case/*.log*
+            scratch/*.e3sm-case/bld/*.bldlog.*
+            scratch/*.e3sm-case/run/*.log.*
+            scratch/eamxx-ctest.log
+            scratch/eamxx-ctest/*/Testing/Temporary/Last*.log
+          if-no-files-found: warn
+          retention-days: 14

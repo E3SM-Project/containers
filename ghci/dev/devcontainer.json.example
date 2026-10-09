@@ -84,10 +84,8 @@
     "CCACHE_MAXSIZE": "20G"
   },
 
-  // CIME identifies the machine by hostname against config_machines.xml. Naming the
-  // container after the machine entry these images are built for lets `create_newcase`
-  // find it without an explicit --machine.
-  "runArgs": ["--hostname=ghci-snl"],
+  // No --hostname or --machine needed for CIME: the -dev images enable their own machine,
+  // e3sm-container, at login (~/.cime and CIME_MACHINE; see the README).
 
   // Lifecycle hooks run under `sh -c`, which is NOT a login shell, so wrap anything that
   // needs the toolchain. `e3sm-env` in these images does exactly that.

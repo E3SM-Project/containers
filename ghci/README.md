@@ -288,6 +288,57 @@ aarch64).
 - **SELinux** (`:z`): on an SELinux-enforced host (RHEL, Fedora), append `:z` to volume
   mounts so podman relabels them.
 
+## Running E3SM (CIME)
+
+E3SM's own machine entries (`ghci`, in E3SM's `cime_config/machines`) describe the CI
+machine these images are built for, and they remain the reference: E3SM's CI uses them, and
+the env images leave CIME exactly as E3SM configures it. As a convenience for running cases
+elsewhere, every image also ships a machine of its own, **`e3sm-container`**, in
+`/projects/e3sm/cime`. It works in any runtime with no `--machine` and no `--hostname`
+trick, but it is only used once you opt in:
+
+- **`-dev` images**: enabled at login, for the image's own `e3sm` user. `~/.cime` gets the
+  machine and `CIME_MACHINE=e3sm-container` is exported.
+- **env images, or another `HOME`** (`--user <uid>`, Apptainer, which brings your host
+  `$HOME`): `. /projects/e3sm/cime/enable.sh` does the same for the current shell. It
+  never overwrites an existing `~/.cime/config_machines.xml`.
+
+```bash
+. /projects/e3sm/cime/enable.sh   # not needed in the -dev images
+cd /projects/e3sm/work/E3SM/cime/scripts
+./create_test SMS_P8_Ln5.ne4pg2_oQU480.F2010 --wait --proc-pool 8
+./create_newcase --case ~/e3sm_scratch/mycase --compset F2010 --res ne4pg2_oQU480
+```
+
+- **Which compiler and MPI**: the image's own; a CUDA image defaults to `gnugpu` and can
+  also build for the CPU with `--compiler gnu`. `query_config --machines e3sm-container`
+  lists them. (`query_config --machines current` guesses from the hostname instead, and a
+  docker hostname matches E3SM's `ghci`.)
+- **Where things go**: inputdata in `/projects/e3sm/data/inputdata` (mount it; CIME downloads
+  what is missing), baselines in `/projects/e3sm/data/baselines/<compiler>`, cases and
+  builds in `~/e3sm_scratch` (`create_test --output-root` changes it).
+- **Cores**: one node of whatever cores the container sees. Tests asking for more ranks
+  than that still run, oversubscribed, but `create_test` only starts a run that fits its
+  process pool (the cores plus 25%), so give it room: `create_test SMS_P8... --proc-pool 8`.
+  Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
+- **GPU arch**: the CUDA images build for Hopper (`HOPPER90`) unless `E3SM_KOKKOS_CUDA_ARCH`
+  names another Kokkos arch, e.g. `AMPERE80`.
+- **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx -m e3sm-container` uses the
+  same machine (`~/.cime/scream_mach_specs.py`).
+- **Explicit machines win**: a machine in a test name, `--machine`, or a `CIME_MACHINE` you
+  set yourself is used as before, so E3SM's `ghci` entries work in every image, opted in or
+  not. `~/.cime` is yours to edit.
+
+CI checks this with `ghci/tests/e3sm-case.sh` (`.github/workflows/e3sm-case.yaml`):
+weekly against the published images and E3SM master, on PRs that change the machine, and
+by hand against any image suffix and E3SM branch, tag or sha. Each image runs three jobs
+side by side: `SMS_Vmoab_P8_Ln5.ne4pg2_oQU480.WCYCL2010NS`,
+`SMS_P8_Ln5.ne4_ne4.F2000-SCREAMv1-AQP1` (`eamxx-L72` testmod), and the EAMxx standalone
+tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does). The CUDA images only build
+the two cases (CI has no GPU). Each job's summary names the E3SM commit and image digest it
+tested. To run it locally against your own checkout, see the script's header (`CASES`
+picks a subset).
+
 ## Python environment & custom packages
 
 The container comes pre-configured with a virtual environment named `eamxx-venv`, activated
