@@ -43,6 +43,14 @@ echo "E3SM $(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown)"
 cd "$src/cime/scripts"
 ./query_config --machines "$CIME_MACHINE"
 
+# CIME (and EAMxx's check-input) first probes the inputdata server with `wget --spider` on its
+# root, and reports "Could not connect" if that takes over 60 s. With wget's defaults (15 min
+# read timeout, 20 tries) one stalled connection uses up all 60 s; short timeouts and a few
+# tries let wget recover from it in time. Only for wget run from this script.
+WGETRC=$(mktemp)
+export WGETRC
+printf '%s\n' 'timeout = 10' 'tries = 4' 'waitretry = 2' 'retry_connrefused = on' > "$WGETRC"
+
 # wcycl names no machine, so it relies on CIME_MACHINE; aqp names it explicitly, which a
 # testmod requires.
 tests=()
