@@ -85,7 +85,8 @@ RUN microdnf -y --enablerepo=epel install \
         which \
         xz \
         zip \
-    && microdnf -y --enablerepo=epel download --destdir=/tmp/lmod Lmod \
+    && mkdir /tmp/lmod \
+    && (cd /tmp/lmod && microdnf -y --enablerepo=epel download Lmod) \
     && rpm -i --nodeps /tmp/lmod/Lmod-*.rpm \
     && rm -rf /tmp/lmod \
     && microdnf clean all \
