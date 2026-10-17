@@ -229,6 +229,7 @@ ARG MPI_SPEC=openmpi@4.1.4
 ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no
 ARG WITH_MOAB=yes
+ARG WITH_PARMETIS=yes
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 ARG TORCH_SPEC=torch
 
@@ -312,6 +313,21 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
       spack clean -sdfmp; \
     fi
 
+# Metis and ParMETIS, for Omega. The specs are the ones Polaris deploys for Omega on the
+# supported machines (64-bit indices and reals), static because Omega's FindParmetis.cmake
+# looks for libmetis.a and libparmetis.a only. Both are roots, so both get a module (implicit
+# packages' are hidden); the modules export METIS_ROOT and PARMETIS_ROOT, which Omega takes
+# as -DOMEGA_METIS_ROOT and -DOMEGA_PARMETIS_ROOT.
+# Both ask for cmake_minimum_required(2.8), which CMake 4 refuses unless told the minimum
+# policy version to use instead; spack's recipes do not, so it is set for this install.
+RUN . /etc/profile && if [ "${WITH_PARMETIS}" = "yes" ]; then \
+      metis="metis@5.1.0+int64+real64~shared %${COMPILER_SPEC}" && \
+      CMAKE_POLICY_VERSION_MINIMUM=3.5 spack install --fail-fast $metis \
+          parmetis@4.0.3+int64~shared %${COMPILER_SPEC} ^${MPI_SPEC} ^$metis && \
+      spack gc -y && \
+      spack clean -sdfmp; \
+    fi
+
 # 14. Debugging tools, from RHEL rather than spack: they are not linked into anything, and
 # the RPMs (gdb 16, valgrind 3.26) install in seconds where spack builds took minutes.
 RUN . /etc/profile && if [ "${WITH_DEBUG_TOOLS}" = "yes" ]; then \
@@ -338,6 +354,7 @@ RUN . /etc/profile && mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       echo "module load $(mods ${MPI_SPEC})"; \
       echo "module load hdf5 netcdf-c netcdf-fortran parallel-netcdf"; \
       [ "${WITH_MOAB}" = yes ] && echo "module load moab"; \
+      [ "${WITH_PARMETIS}" = yes ] && echo "module load metis parmetis"; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
@@ -376,6 +393,7 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_LAPACK=${LAPACK_SPEC}"; \
       echo "E3SM_WITH_CUDA=${WITH_CUDA}"; \
       echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
+      echo "E3SM_WITH_PARMETIS=${WITH_PARMETIS}"; \
       echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env
 
 # 16. CIME machine "e3sm-container", for create_newcase/create_test (and test-all-eamxx)

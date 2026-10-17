@@ -75,3 +75,11 @@ modules:
         environment:
           set:
             'MOAB_ROOT': '{prefix}'
+      metis:
+        environment:
+          set:
+            'METIS_ROOT': '{prefix}'
+      parmetis:
+        environment:
+          set:
+            'PARMETIS_ROOT': '{prefix}'

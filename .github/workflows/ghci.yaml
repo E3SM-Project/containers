@@ -240,6 +240,7 @@ jobs:
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
           # -cuda without a version: 12.4 on x86_64, 13.0 on aarch64 (see ghci/README.md)
           - env: gnu13-mpich4-cuda
             arches: '["x86_64", "aarch64"]'
@@ -251,6 +252,7 @@ jobs:
               WITH_DEBUG_TOOLS=no
               WITH_CUDA=yes
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
           # Intel oneAPI ships for x86_64 only
           - env: intel2024-openmpi4
             arches: '["x86_64"]'
@@ -263,6 +265,7 @@ jobs:
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
     with:
       image_name: e3sm-image
       tag: ${{ matrix.env }}

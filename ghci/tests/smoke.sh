@@ -376,6 +376,42 @@ CPP
     ./moab-link
 fi
 
+if [ "${E3SM_WITH_PARMETIS:-no}" = yes ]; then
+    step "Metis/ParMETIS"
+    metis=${METIS_ROOT:?METIS_ROOT is not set}
+    parmetis=${PARMETIS_ROOT:?PARMETIS_ROOT is not set}
+    echo "METIS_ROOT=$metis"
+    echo "PARMETIS_ROOT=$parmetis"
+    # Omega's FindParmetis.cmake looks for the static libraries only, in <root>/lib
+    test -f "$metis/lib/libmetis.a"
+    test -f "$parmetis/lib/libparmetis.a"
+    # 64-bit indices and reals, as Omega is deployed with elsewhere
+    grep -E '^#define IDXTYPEWIDTH 64' "$metis/include/metis.h" >/dev/null
+    grep -E '^#define REALTYPEWIDTH 64' "$metis/include/metis.h" >/dev/null
+    # Partition a 4-vertex ring, two vertices per rank, into two parts
+    cat > parmetis.c <<'C'
+#include <mpi.h>
+#include <parmetis.h>
+int main(int argc, char **argv) {
+    MPI_Init(&argc, &argv);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    idx_t vtxdist[] = {0, 2, 4}, xadj[] = {0, 2, 4};
+    idx_t adjncy[2][4] = {{1, 3, 0, 2}, {1, 3, 2, 0}};
+    idx_t wgtflag = 0, numflag = 0, ncon = 1, nparts = 2, options[] = {0, 0, 0}, edgecut, part[2];
+    real_t tpwgts[] = {0.5, 0.5}, ubvec[] = {1.05};
+    int rc = ParMETIS_V3_PartKway(vtxdist, xadj, adjncy[rank], NULL, NULL, &wgtflag, &numflag,
+                                  &ncon, &nparts, tpwgts, ubvec, options, &edgecut, part, &comm);
+    MPI_Finalize();
+    return rc == METIS_OK && part[0] >= 0 && part[0] < 2 && part[1] >= 0 && part[1] < 2 ? 0 : 1;
+}
+C
+    mpicc parmetis.c -o parmetis-link -I"$parmetis/include" -I"$metis/include" \
+        "$parmetis/lib/libparmetis.a" "$metis/lib/libmetis.a" -lm
+    mpirun -n 2 ./parmetis-link
+fi
+
 if [ "${EXPECT_CUDA:-}" = yes ]; then
     step "CUDA: compile a kernel (no GPU needed)"
     test "$E3SM_WITH_CUDA" = yes
