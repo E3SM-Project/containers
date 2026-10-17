@@ -339,6 +339,13 @@ the two cases (CI has no GPU). Each job's summary names the E3SM commit and imag
 tested. To run it locally against your own checkout, see the script's header (`CASES`
 picks a subset).
 
+Omega gets the same treatment from `ghci/tests/omega-case.sh`
+(`.github/workflows/omega-case.yaml`): it builds Omega standalone against Omega develop with
+the same machine and the image's Metis/ParMETIS (`-DOMEGA_METIS_ROOT=$METIS_ROOT
+-DOMEGA_PARMETIS_ROOT=$PARMETIS_ROOT`), and runs its CTests, Release and Debug, in every CPU
+image. It runs weekly, on PRs that change the machine or the test, and by hand against any
+image suffix and Omega ref.
+
 ## Python environment & custom packages
 
 The container comes pre-configured with a virtual environment named `eamxx-venv`, activated
@@ -391,6 +398,7 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `WITH_DEBUG_TOOLS` | `yes`                        | gdb and valgrind, from RHEL |
 | `WITH_CUDA`        | `no`                         | |
 | `WITH_MOAB`        | `yes`                        | MOAB 5.6.0 (with TempestRemap) from spack; its module exports `MOAB_ROOT` |
+| `WITH_PARMETIS`    | `yes`                        | static Metis 5.1.0 and ParMETIS 4.0.3 (64-bit indices and reals) from spack, for Omega; their modules export `METIS_ROOT` and `PARMETIS_ROOT` |
 
 ## How the images are put together
 
