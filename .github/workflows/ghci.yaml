@@ -13,12 +13,12 @@ on:
   merge_group:
     branches: [ main ]
 
-  # Weekly, a full build and smoke test of main with nothing changed. The base image, the RPM
+  # Monthly, a full build and smoke test of main with nothing changed. The base image, the RPM
   # repos, the binary caches and the upstream installers all move on their own, and without
   # this a break there (EPEL's Lmod 9.4.2 needing a csh that UBI9 lacks, say) only shows up
   # in the next PR to rebuild. It publishes nothing; see `suffix`.
   schedule:
-    - cron: '17 5 * * 1'
+    - cron: '17 5 1 * *'
 
   workflow_dispatch:
 
@@ -41,7 +41,7 @@ jobs:
   # So we must run a filter manually, to ensure we can detect whether to run the
   # workflow or not also for merge_group events. Three exceptions for which we ALWAYS run:
   #  - workflow_dispatch: is a deliberate manual request, so we assume we want to run
-  #  - schedule: the weekly check that main still builds, which changes no file
+  #  - schedule: the monthly check that main still builds, which changes no file
   #  - ref_type=='tag': if we push a tag, we want to ensure it is working, so run all tests
   #
   # Two filters, one per stage, so a change only rebuilds what it can affect: `env` (the env
@@ -119,15 +119,15 @@ jobs:
   #
   # promote / release_suffix: whether `promote` publishes the tested images, and under which
   # suffix: "" (the plain tags people pull) for main, -<version> for a ghci-<version> tag,
-  # -<branch> for a dispatch on another branch. PRs, the merge queue and the weekly scheduled
+  # -<branch> for a dispatch on another branch. PRs, the merge queue and the monthly scheduled
   # run publish nothing: a scheduled run stages under -rc-<run_id> like a dispatch, but only
   # to test. Publishing it would change the tags people pull with no change to review.
   #
   # cache: the BuildKit cache scope (build-multiarch.yaml's cache_suffix): shared ("") for
   # reviewed work, the PR's or branch's own otherwise.
   #
-  # fresh: build every layer without the cache, for the weekly scheduled run, whose point is to
-  # notice what the cache would hide. It writes its layers to a -weekly scope of its own.
+  # fresh: build every layer without the cache, for the monthly scheduled run, whose point is to
+  # notice what the cache would hide. It writes its layers to a -scheduled scope of its own.
   suffix:
     runs-on: ubuntu-latest
     permissions:
@@ -171,7 +171,7 @@ jobs:
             cache="$value"
           elif [ "$EVENT" = schedule ]; then
             value="-rc-$RUN_ID"
-            cache="-weekly"
+            cache="-scheduled"
             fresh=true
           else
             promote=true

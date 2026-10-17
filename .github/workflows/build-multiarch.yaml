@@ -52,7 +52,7 @@ on:
         default: ''
       no_cache:
         description: >-
-          Build every layer from scratch, reading no cache. For the weekly check that main
+          Build every layer from scratch, reading no cache. For the monthly check that main
           still builds: a cached layer would hide a change upstream (an RPM, an installer)
           that breaks it.
         required: false
