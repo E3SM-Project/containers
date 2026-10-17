@@ -14,7 +14,7 @@ step() { echo "== $*"; }
 bash "$here/smoke.sh"
 
 step "dev tools"
-for tool in ninja gdb strace ccache rg fzf tig gh node npm uv vim ssh git-lfs; do
+for tool in ninja gdb strace ccache rg fzf tig gh node npm vim ssh git-lfs; do
     command -v "$tool" > /dev/null || { echo "$tool is not on PATH" >&2; exit 1; }
 done
 node --version
@@ -22,18 +22,19 @@ gh --version | sed -n 1p
 
 step "CIME machine enabled at login"
 test "${CIME_MACHINE:-}" = e3sm-container
+test "${SCREAM_MACHINE:-}" = e3sm-container
 grep -q 'MACH="e3sm-container"' "$HOME/.cime/config_machines.xml"
 
 step "coding agents"
 # --version only: no network, no login.
-for agent in claude opencode codex copilot; do
+for agent in claude codex copilot; do
     command -v "$agent" > /dev/null || { echo "$agent is not on PATH" >&2; exit 1; }
     echo "$agent $("$agent" --version 2>&1 | sed -n 1p)"
 done
 
 step "ownership"
 user=$(id -un)
-for dir in ~/.cache/ccache ~/.config ~/.claude ~/.codex ~/.copilot ~/.local/share/opencode \
+for dir in ~/.cache/ccache ~/.config ~/.claude ~/.codex ~/.copilot \
            /projects/e3sm/work; do
     test "$(stat -c %U "$dir")" = "$user" || { echo "$dir is not owned by $user" >&2; exit 1; }
     test -w "$dir"

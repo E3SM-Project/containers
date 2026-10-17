@@ -90,20 +90,17 @@ podman pull --platform linux/arm64 ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi
 `<tag>-dev` is the matching env plus the things you want when you actually work inside the
 container rather than just run tests in it:
 
-- **Coding agents:** `claude`, `codex`, `copilot`, `opencode`
-- **Python tooling:** `uv` (and `uvx`)
+- **Coding agents:** `claude`, `codex`, `copilot`
 - **Build loop:** `ccache`, `ninja`, `gdb`, `strace`
 - **Shell/CLI:** `gh`, vim, `ripgrep`, `fzf`, `tig`, `bat`, `ncdu`,
   `git-lfs`, bash completion, a git-aware prompt, sensible history settings
 - **Node** (upstream build, since the UBI9 package is EOL node 16), so `npm i -g` works
 
-Each agent and `uv` is installed from its own upstream installer into `$HOME`, as the
-`e3sm` user, so they self-update inside a running container with no root and no rebuild:
+Each agent is installed from its own upstream installer into `$HOME`, as the `e3sm` user,
+so they self-update inside a running container with no root and no rebuild:
 
 ```bash
-uv self update
 claude update
-opencode upgrade
 codex --upgrade
 copilot --version   # self-updates on run
 ```
@@ -142,7 +139,7 @@ for a password). For `gh` and the agent CLIs, pick one of the two mount blocks i
 example: empty named volumes and log in once inside (nothing from the host is exposed), or
 bind your host config dirs for a working-on-first-launch setup -- at the cost of every
 process in the container, agents included, being able to read those credentials. Note that
-`gh`, `codex`, `copilot` and `opencode` keep their credentials in files, so bind-mounting
+`gh`, `codex` and `copilot` keep their credentials in files, so bind-mounting
 those works. Claude Code on macOS keeps its token in the **Keychain**, so it cannot be
 mounted in -- log in once inside and the `~/.claude` volume keeps it across rebuilds.
 
@@ -298,7 +295,7 @@ elsewhere, every image also ships a machine of its own, **`e3sm-container`**, in
 trick, but it is only used once you opt in:
 
 - **`-dev` images**: enabled at login, for the image's own `e3sm` user. `~/.cime` gets the
-  machine and `CIME_MACHINE=e3sm-container` is exported.
+  machine, and `CIME_MACHINE` and `SCREAM_MACHINE` are exported as `e3sm-container`.
 - **env images, or another `HOME`** (`--user <uid>`, Apptainer, which brings your host
   `$HOME`): `. /projects/e3sm/cime/enable.sh` does the same for the current shell. It
   never overwrites an existing `~/.cime/config_machines.xml`.
@@ -323,8 +320,9 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
 - **GPU arch**: the CUDA images build for Hopper (`HOPPER90`) unless `E3SM_KOKKOS_CUDA_ARCH`
   names another Kokkos arch, e.g. `AMPERE80`.
-- **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx -m e3sm-container` uses the
-  same machine (`~/.cime/scream_mach_specs.py`).
+- **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx` uses the same machine
+  (`~/.cime/scream_mach_specs.py`), through `SCREAM_MACHINE` once opted in, or with
+  `-m e3sm-container`.
 - **Explicit machines win**: a machine in a test name, `--machine`, or a `CIME_MACHINE` you
   set yourself is used as before, so E3SM's `ghci` entries work in every image, opted in or
   not. `~/.cime` is yours to edit.
