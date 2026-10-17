@@ -52,7 +52,11 @@ RUN microdnf -y install \
 # NOTE: which, bc, findutils and rsync are not in ubi9-minimal, and build systems assume
 # they exist -- CIME and configure scripts call `which nvcc`, `which mpicc` and friends.
 # less, nano, screen and zip are the basics for debugging inside the image the tests run in.
+# Lmod itself is installed with --nodeps: rpm derives a dependency on /usr/bin/csh from the
+# shebangs of its csh init scripts (Lmod 9.4.2 on), and no UBI or EPEL package provides csh.
+# Its declared dependencies are installed first, so only that one is skipped.
 RUN microdnf -y --enablerepo=epel install \
+        alternatives \
         bc \
         bind-utils \
         bzip2 \
@@ -64,7 +68,10 @@ RUN microdnf -y --enablerepo=epel install \
         iputils \
         jq \
         less \
-        Lmod \
+        lua-filesystem \
+        lua-json \
+        lua-posix \
+        lua-term \
         nano \
         procps \
         rsync \
@@ -78,6 +85,9 @@ RUN microdnf -y --enablerepo=epel install \
         which \
         xz \
         zip \
+    && microdnf -y --enablerepo=epel download --destdir=/tmp/lmod Lmod \
+    && rpm -i --nodeps /tmp/lmod/Lmod-*.rpm \
+    && rm -rf /tmp/lmod \
     && microdnf clean all \
     && rm -rf /var/cache/dnf
 
