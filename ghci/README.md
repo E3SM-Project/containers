@@ -343,7 +343,7 @@ Omega gets the same treatment from `ghci/tests/omega-case.sh`
 (`.github/workflows/omega-case.yaml`): it builds Omega standalone against Omega develop with
 the same machine and the image's Metis/ParMETIS (`-DOMEGA_METIS_ROOT=$METIS_ROOT
 -DOMEGA_PARMETIS_ROOT=$PARMETIS_ROOT`), and runs its CTests, Release and Debug, in every CPU
-image. It runs weekly, on PRs that change the machine or the test, and by hand against any
+image on x86_64 (aarch64 waits on E3SM-Project/Omega#610). It runs weekly, on PRs that change the machine or the test, and by hand against any
 image suffix and Omega ref.
 
 ## Python environment & custom packages

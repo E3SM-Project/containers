@@ -55,15 +55,15 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      # ghci.yaml's per-arch CPU variants, times Omega's two build types. The CUDA image is
-      # left out: hosted runners have no GPU to run the tests on.
+      # ghci.yaml's CPU variants, times Omega's two build types. The CUDA image is left out:
+      # hosted runners have no GPU to run the tests on. x86_64 only for now: Omega's standalone
+      # build reads the CIME macros before project(), so on aarch64 it gets x86's
+      # -mcmodel=medium and fails to configure (E3SM-Project/Omega#610). Add aarch64 back
+      # (excluding intel there) once that is fixed.
       matrix:
         env: [gnu13-openmpi4, intel2024-openmpi4]
-        arch: [x86_64, aarch64]
+        arch: [x86_64]
         build_type: [Release, Debug]
-        exclude:
-          - env: intel2024-openmpi4
-            arch: aarch64
     name: omega-case (${{ matrix.env }}, ${{ matrix.arch }}, ${{ matrix.build_type }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ inputs.suffix }}
