@@ -331,10 +331,13 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
 # as -DOMEGA_METIS_ROOT and -DOMEGA_PARMETIS_ROOT.
 # Both ask for cmake_minimum_required(2.8), which CMake 4 refuses unless told the minimum
 # policy version to use instead; spack's recipes do not, so it is set for this install.
+# The MPI is the one installed above, by hash: ^${MPI_SPEC} alone let the intel image's
+# parmetis reuse the binary cache's gcc-built openmpi instead.
 RUN . /etc/profile && if [ "${WITH_PARMETIS}" = "yes" ]; then \
       metis="metis@5.1.0+int64+real64~shared %${COMPILER_SPEC}" && \
+      mpi=$(spack find --format "/{hash}" "${MPI_SPEC} %${COMPILER_SPEC}") && \
       CMAKE_POLICY_VERSION_MINIMUM=3.5 spack install --fail-fast $metis \
-          parmetis@4.0.3+int64~shared %${COMPILER_SPEC} ^${MPI_SPEC} ^$metis && \
+          parmetis@4.0.3+int64~shared %${COMPILER_SPEC} ^$mpi ^$metis && \
       spack gc -y && \
       spack clean -sdfmp; \
     fi
