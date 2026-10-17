@@ -39,8 +39,10 @@ on:
         type: string
         default: develop
 
+# The name is spelled out: called from ghci.yaml, github.workflow is "ghci", and e3sm-case and
+# omega-case would then share one group and cancel each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.suffix || github.ref }}
+  group: omega-case-${{ github.event_name }}-${{ inputs.suffix || github.ref }}
   cancel-in-progress: true
 
 permissions:
