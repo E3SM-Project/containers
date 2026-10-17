@@ -390,6 +390,7 @@ if [ "${E3SM_WITH_PARMETIS:-no}" = yes ]; then
     grep -E '^#define REALTYPEWIDTH 64' "$metis/include/metis.h" >/dev/null
     # Partition a 4-vertex ring, two vertices per rank, into two parts
     cat > parmetis.c <<'C'
+#include <stddef.h>
 #include <mpi.h>
 #include <parmetis.h>
 int main(int argc, char **argv) {
