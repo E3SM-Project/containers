@@ -52,6 +52,7 @@ jobs:
       env: ${{ steps.filter.outputs.env || steps.force.outputs.env }}
       dev: ${{ steps.filter.outputs.dev || steps.force.outputs.dev }}
       cime: ${{ steps.filter.outputs.cime }}
+      omega: ${{ steps.filter.outputs.omega }}
       relevant: ${{ steps.filter.outputs.env == 'true' || steps.filter.outputs.dev == 'true' || steps.force.outputs.env == 'true' }}
     steps:
       - uses: actions/checkout@v7
@@ -74,6 +75,11 @@ jobs:
               - 'ghci/env/cime/**'
               - 'ghci/tests/e3sm-case.sh'
               - '.github/workflows/e3sm-case.yaml'
+            # What omega-case.yaml checks: the same machine, and that test itself
+            omega:
+              - 'ghci/env/cime/**'
+              - 'ghci/tests/omega-case.sh'
+              - '.github/workflows/omega-case.yaml'
       - id: force
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: |
@@ -194,6 +200,7 @@ jobs:
           bash -n ghci/tests/apptainer.sh
           bash -n ghci/tests/dev-container.sh
           bash -n ghci/tests/e3sm-case.sh
+          bash -n ghci/tests/omega-case.sh
           sh -n ghci/env/cime/enable.sh
       # A malformed file stops every CIME command in the image; the schema itself is checked
       # by e3sm-case.yaml, which needs an E3SM checkout for it.
@@ -240,6 +247,7 @@ jobs:
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
           # -cuda without a version: 12.4 on x86_64, 13.0 on aarch64 (see ghci/README.md)
           - env: gnu13-mpich4-cuda
             arches: '["x86_64", "aarch64"]'
@@ -251,6 +259,7 @@ jobs:
               WITH_DEBUG_TOOLS=no
               WITH_CUDA=yes
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
           # Intel oneAPI ships for x86_64 only
           - env: intel2024-openmpi4
             arches: '["x86_64"]'
@@ -263,6 +272,7 @@ jobs:
               WITH_DEBUG_TOOLS=yes
               WITH_CUDA=no
               WITH_MOAB=yes
+              WITH_PARMETIS=yes
     with:
       image_name: e3sm-image
       tag: ${{ matrix.env }}
@@ -487,6 +497,23 @@ jobs:
       && needs.changes.outputs.cime == 'true'
       && (needs.smoke.result == 'success' || (needs.smoke.result == 'skipped' && needs.changes.outputs.env != 'true')) }}
     uses: ./.github/workflows/e3sm-case.yaml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      suffix: ${{ needs.changes.outputs.env == 'true' && needs.suffix.outputs.value || '' }}
+
+  # Build Omega and run its CTests (omega-case.yaml), on the same terms as e3sm-case: when a
+  # same-repo PR changes the image's CIME machine or that test, and weekly on its own. Also
+  # NOT required: Omega develop moves on its own.
+  omega-case:
+    needs: [changes, suffix, smoke]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changes.outputs.omega == 'true'
+      && (needs.smoke.result == 'success' || (needs.smoke.result == 'skipped' && needs.changes.outputs.env != 'true')) }}
+    uses: ./.github/workflows/omega-case.yaml
     permissions:
       contents: read
       packages: read

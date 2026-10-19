@@ -52,7 +52,11 @@ RUN microdnf -y install \
 # NOTE: which, bc, findutils and rsync are not in ubi9-minimal, and build systems assume
 # they exist -- CIME and configure scripts call `which nvcc`, `which mpicc` and friends.
 # less, nano, screen and zip are the basics for debugging inside the image the tests run in.
+# Lmod itself is installed with --nodeps: rpm derives a dependency on /usr/bin/csh from the
+# shebangs of its csh init scripts (Lmod 9.4.2 on), and no UBI or EPEL package provides csh.
+# Its declared dependencies are installed first, so only that one is skipped.
 RUN microdnf -y --enablerepo=epel install \
+        alternatives \
         bc \
         bind-utils \
         bzip2 \
@@ -64,7 +68,10 @@ RUN microdnf -y --enablerepo=epel install \
         iputils \
         jq \
         less \
-        Lmod \
+        lua-filesystem \
+        lua-json \
+        lua-posix \
+        lua-term \
         nano \
         procps \
         rsync \
@@ -78,6 +85,10 @@ RUN microdnf -y --enablerepo=epel install \
         which \
         xz \
         zip \
+    && mkdir /tmp/lmod \
+    && (cd /tmp/lmod && microdnf -y --enablerepo=epel download Lmod) \
+    && rpm -i --nodeps /tmp/lmod/Lmod-*.rpm \
+    && rm -rf /tmp/lmod \
     && microdnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -229,6 +240,7 @@ ARG MPI_SPEC=openmpi@4.1.4
 ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no
 ARG WITH_MOAB=yes
+ARG WITH_PARMETIS=yes
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 ARG TORCH_SPEC=torch
 
@@ -312,6 +324,24 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
       spack clean -sdfmp; \
     fi
 
+# Metis and ParMETIS, for Omega. The specs are the ones Polaris deploys for Omega on the
+# supported machines (64-bit indices and reals), static because Omega's FindParmetis.cmake
+# looks for libmetis.a and libparmetis.a only. Both are roots, so both get a module (implicit
+# packages' are hidden); the modules export METIS_ROOT and PARMETIS_ROOT, which Omega takes
+# as -DOMEGA_METIS_ROOT and -DOMEGA_PARMETIS_ROOT.
+# Both ask for cmake_minimum_required(2.8), which CMake 4 refuses unless told the minimum
+# policy version to use instead; spack's recipes do not, so it is set for this install.
+# The MPI is the one installed above, by hash: ^${MPI_SPEC} alone let the intel image's
+# parmetis reuse the binary cache's gcc-built openmpi instead.
+RUN . /etc/profile && if [ "${WITH_PARMETIS}" = "yes" ]; then \
+      metis="metis@5.1.0+int64+real64~shared %${COMPILER_SPEC}" && \
+      mpi=$(spack find --format "/{hash}" "${MPI_SPEC} %${COMPILER_SPEC}") && \
+      CMAKE_POLICY_VERSION_MINIMUM=3.5 spack install --fail-fast $metis \
+          parmetis@4.0.3+int64~shared %${COMPILER_SPEC} ^$mpi ^$metis && \
+      spack gc -y && \
+      spack clean -sdfmp; \
+    fi
+
 # 14. Debugging tools, from RHEL rather than spack: they are not linked into anything, and
 # the RPMs (gdb 16, valgrind 3.26) install in seconds where spack builds took minutes.
 RUN . /etc/profile && if [ "${WITH_DEBUG_TOOLS}" = "yes" ]; then \
@@ -338,6 +368,7 @@ RUN . /etc/profile && mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       echo "module load $(mods ${MPI_SPEC})"; \
       echo "module load hdf5 netcdf-c netcdf-fortran parallel-netcdf"; \
       [ "${WITH_MOAB}" = yes ] && echo "module load moab"; \
+      [ "${WITH_PARMETIS}" = yes ] && echo "module load metis parmetis"; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
@@ -376,6 +407,7 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_LAPACK=${LAPACK_SPEC}"; \
       echo "E3SM_WITH_CUDA=${WITH_CUDA}"; \
       echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
+      echo "E3SM_WITH_PARMETIS=${WITH_PARMETIS}"; \
       echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env
 
 # 16. CIME machine "e3sm-container", for create_newcase/create_test (and test-all-eamxx)

@@ -26,6 +26,11 @@ modules:
       projections:
         all: '{name}/{version}'
       hide_implicits: true
+      # oneAPI's module would otherwise load the gcc it depends on, which is also in the
+      # "compiler" family, and Lmod (9.4 on) then swaps oneAPI out for it: nothing below the
+      # compiler in the hierarchy loads. gcc comes from gcc-toolset at login anyway.
+      intel-oneapi-compilers:
+        autoload: none
       # Explicit targets for <pkg>_ROOT generation in the module files
       openmpi:
         environment:
@@ -75,3 +80,11 @@ modules:
         environment:
           set:
             'MOAB_ROOT': '{prefix}'
+      metis:
+        environment:
+          set:
+            'METIS_ROOT': '{prefix}'
+      parmetis:
+        environment:
+          set:
+            'PARMETIS_ROOT': '{prefix}'
