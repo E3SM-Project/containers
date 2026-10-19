@@ -8,6 +8,8 @@
 # - Exports CIME_MACHINE=e3sm-container if ~/.cime has the machine and CIME_MACHINE is not set
 #   already, so create_newcase/create_test need no --machine. An explicit machine (in a test
 #   name, --machine) still wins over it.
+# - Likewise exports SCREAM_MACHINE=e3sm-container, which test-all-eamxx reads instead of
+#   CIME_MACHINE, so it needs no -m either.
 #
 # Sourced from login shells, so it must never fail or print.
 if [ -n "${HOME:-}" ] && [ -w "$HOME" ] && [ ! -e "$HOME/.cime/config_machines.xml" ]; then
@@ -17,5 +19,8 @@ if [ -n "${HOME:-}" ] && [ -w "$HOME" ] && [ ! -e "$HOME/.cime/config_machines.x
 fi
 if [ -z "${CIME_MACHINE:-}" ] && grep -qs 'MACH="e3sm-container"' "$HOME/.cime/config_machines.xml"; then
     export CIME_MACHINE=e3sm-container
+fi
+if [ -z "${SCREAM_MACHINE:-}" ] && grep -qs 'MACH="e3sm-container"' "$HOME/.cime/config_machines.xml"; then
+    export SCREAM_MACHINE=e3sm-container
 fi
 true

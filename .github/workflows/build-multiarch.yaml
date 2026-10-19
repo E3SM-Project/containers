@@ -50,6 +50,14 @@ on:
         required: false
         type: string
         default: ''
+      no_cache:
+        description: >-
+          Build every layer from scratch, reading no cache. For the monthly check that main
+          still builds: a cached layer would hide a change upstream (an RPM, an installer)
+          that breaks it.
+        required: false
+        type: boolean
+        default: false
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
@@ -151,6 +159,7 @@ jobs:
             type=registry,ref=${{ env.CACHE }}:${{ inputs.tag }}${{ inputs.cache_suffix }}-${{ matrix.arch }}
             ${{ inputs.cache_suffix != '' && format('type=registry,ref={0}:{1}-{2}', env.CACHE, inputs.tag, matrix.arch) || '' }}
           cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:{1}{2}-{3},mode=max,ignore-error=true', env.CACHE, inputs.tag, inputs.cache_suffix, matrix.arch) || '' }}
+          no-cache: ${{ inputs.no_cache }}
       - name: Export digest
         if: env.PUSH == 'true'
         run: |
