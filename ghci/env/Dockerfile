@@ -183,7 +183,7 @@ ENV COMPILER=${COMPILER}
 # NOTE: gcc-toolset drags in environment-modules (via scl-utils, even with weak deps off),
 # whose /etc/profile.d/modules.sh overwrites Lmod's: `module` then becomes Tcl modules, which
 # cannot read spack's .lua modulefiles, and nothing loads. Put Lmod's hooks back, and check.
-RUN . /etc/profile && cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh /tmp/ && \
+RUN . /etc/profile && \
     microdnf -y install \
         gcc-toolset-${GCC_TOOLSET}-gcc \
         gcc-toolset-${GCC_TOOLSET}-gcc-c++ \
@@ -191,8 +191,8 @@ RUN . /etc/profile && cp -p /etc/profile.d/modules.sh /etc/profile.d/modules.csh
         gcc-toolset-${GCC_TOOLSET}-libatomic-devel \
     && microdnf clean all \
     && rm -rf /var/cache/dnf && \
-    mv /tmp/modules.sh /tmp/modules.csh /etc/profile.d/ && \
-    grep -q /usr/share/lmod /etc/profile.d/modules.sh && \
+    alternatives --set modules.sh  /usr/share/lmod/lmod/init/profile && \
+    [ "$(readlink -f /etc/profile.d/modules.sh)" = "$(readlink -f /usr/share/lmod/lmod/init/profile)" ] && \
     echo "source /opt/rh/gcc-toolset-${GCC_TOOLSET}/enable" > /etc/profile.d/gcc-toolset.sh && \
     spack compiler find --scope system /opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin && \
     gcc_version="$(/opt/rh/gcc-toolset-${GCC_TOOLSET}/root/usr/bin/gcc -dumpfullversion)" && \
