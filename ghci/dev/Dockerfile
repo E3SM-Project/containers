@@ -167,6 +167,12 @@ RUN set -o pipefail && curl -fsSL https://claude.ai/install.sh | bash
 RUN set -o pipefail && curl -fsSL https://chatgpt.com/codex/install.sh | sh
 RUN set -o pipefail && curl -fsSL https://gh.io/copilot-install | bash
 
+# The env image's inventory (/etc/e3sm/inventory, see ghci/env/e3sm-inventory), written again
+# so it also covers what this layer adds: its RPMs, node, gh and the agents' versions.
+USER root
+RUN /usr/local/bin/e3sm-inventory
+USER ${E3SM_USER}
+
 WORKDIR /projects/e3sm/work
 
 # The env image's entrypoint and default command (see there). Setting ENTRYPOINT resets the

@@ -1,4 +1,8 @@
-FROM registry.access.redhat.com/ubi9-minimal:latest
+# The base, pinned by its multi-arch digest so two builds of one commit start from the same
+# image. Dependabot (.github/dependabot.yml) opens a PR when `latest` moves, which CI then
+# builds and tests like any other change, so security updates still flow, one reviewed PR at
+# a time.
+FROM registry.access.redhat.com/ubi9-minimal:latest@sha256:c4c285d42941ebb2bd4da878479008e1e4536bb599aad1dbe568f89de9053661
 
 # One recipe for every env variant. The variants themselves (which args each one sets) are
 # the matrix in .github/workflows/ghci.yaml; the defaults below are the gnu13-openmpi4 values.
@@ -458,6 +462,15 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
       python3 -m pip install --no-cache-dir --only-binary=:all: "${E3SM_CUPY_PKG}"; \
     fi && \
     python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
+
+# 18. What this image contains, in /etc/e3sm/inventory: the base image's build, every RPM,
+# spack package and venv package, and the compiler/MPI/tool versions (see the script). Last,
+# so it records everything above, and so editing the script only rebuilds this layer. CI
+# uploads it from every image it smoke-tests; `diff -r` between two of them shows what moved.
+USER root
+COPY e3sm-inventory /usr/local/bin/e3sm-inventory
+RUN /usr/local/bin/e3sm-inventory
+USER ${E3SM_USER}
 
 WORKDIR /home/${E3SM_USER}
 

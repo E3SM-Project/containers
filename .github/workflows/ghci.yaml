@@ -221,6 +221,7 @@ jobs:
           bash -n ghci/tests/dev-container.sh
           bash -n ghci/tests/e3sm-case.sh
           bash -n ghci/tests/omega-case.sh
+          bash -n ghci/env/e3sm-inventory
           sh -n ghci/env/cime/enable.sh
       # A malformed file stops every CIME command in the image; the schema itself is checked
       # by e3sm-case.yaml, which needs an E3SM checkout for it.
@@ -401,6 +402,21 @@ jobs:
             test -f /projects/e3sm/cime/config_machines.xml && test -f /projects/e3sm/cime/enable.sh
             ! grep -q ">@" /projects/e3sm/cime/config_machines.xml
           '
+      # What the image contains (/etc/e3sm/inventory, see ghci/env/e3sm-inventory), plus the
+      # base digest it was built from, which the image cannot see itself. Failing here means
+      # the image has no inventory.
+      - name: Copy out the inventory
+        run: |
+          id=$(docker create "$IMAGE")
+          docker cp "$id:/etc/e3sm/inventory" inventory
+          docker rm "$id" > /dev/null
+          sed -n 's/^FROM //p' ghci/env/Dockerfile > inventory/base-ref.txt
+          wc -l inventory/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: inventory-${{ matrix.env }}-${{ matrix.arch }}
+          path: inventory/
+          retention-days: 30
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -444,6 +460,21 @@ jobs:
           docker run --rm -e EXPECT_CUDA \
             -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
             "$IMAGE" bash -l /opt/ghci-tests/smoke-dev.sh
+      # What the image contains (/etc/e3sm/inventory, see ghci/env/e3sm-inventory), plus the
+      # base digest it was built from, which the image cannot see itself. Failing here means
+      # the image has no inventory.
+      - name: Copy out the inventory
+        run: |
+          id=$(docker create "$IMAGE")
+          docker cp "$id:/etc/e3sm/inventory" inventory
+          docker rm "$id" > /dev/null
+          sed -n 's/^FROM //p' ghci/env/Dockerfile > inventory/base-ref.txt
+          wc -l inventory/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: inventory-${{ matrix.env }}-dev-${{ matrix.arch }}
+          path: inventory/
+          retention-days: 30
       - uses: actions/upload-artifact@v7
         if: always()
         with:

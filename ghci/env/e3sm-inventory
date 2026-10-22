@@ -1,0 +1,77 @@
+#!/bin/bash -l
+# Write what this image contains to /etc/e3sm/inventory (or the directory given), one sorted
+# text file per source, so two images can be compared with `diff -r`. Run as root at the end
+# of the env build, and again at the end of the -dev build, which adds what its layer brings.
+# CI copies the directory out of every image it smoke-tests and uploads it as an artifact.
+#
+#   base.json   the UBI base image's own labels (release, vcs-ref, build-date): which build of
+#               the base this is. The digest itself is in the FROM line of ghci/env/Dockerfile
+#               at the commit in the image's org.opencontainers.image.revision label.
+#   rpm.txt     every RPM, name-version-release.arch
+#   spack.txt   every spack package, with its hash and variants
+#   pip.txt     the eamxx venv's packages
+#   tools.txt   versions of the compilers, MPI and the tools around them; in a -dev image also
+#               node, gh and the coding agents (which update themselves, so this is what the
+#               image shipped with)
+#
+# A login shell (the shebang), so spack, the modules and the venv are what a user gets.
+set -uo pipefail
+
+out=${1:-/etc/e3sm/inventory}
+mkdir -p "$out"
+
+# The first line a command prints, or a note that it is absent, so a missing tool shows up
+# in a diff instead of silently dropping a line.
+version() {
+    local name=$1; shift
+    if command -v "$1" > /dev/null 2>&1; then
+        printf '%s: %s\n' "$name" "$("$@" 2>&1 | grep -m1 . || echo unknown)"
+    else
+        printf '%s: absent\n' "$name"
+    fi
+}
+
+cp /root/buildinfo/labels.json "$out/base.json" 2> /dev/null || echo '{}' > "$out/base.json"
+rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort > "$out/rpm.txt"
+spack find -lv --no-groups 2> /dev/null | sort > "$out/spack.txt"
+/projects/e3sm/software/eamxx-venv/bin/python3 -m pip freeze 2> /dev/null | sort > "$out/pip.txt"
+
+{
+    cat /etc/redhat-release
+    version mpicc mpicc --version
+    version mpifort mpifort --version
+    version mpirun mpirun --version
+    if command -v nvcc > /dev/null 2>&1; then
+        printf 'nvcc: %s\n' "$(nvcc --version | tail -1)"
+    else
+        echo 'nvcc: absent'
+    fi
+    version cmake cmake --version
+    version python3 /projects/e3sm/software/eamxx-venv/bin/python3 --version
+    version spack spack --version
+    if command -v node > /dev/null 2>&1; then
+        version node node --version
+        version gh gh --version
+        # The agents are e3sm's, in its ~/.local/bin, and some write their config on first
+        # run, so ask them as e3sm with a throwaway HOME: nothing lands in the image's
+        # /home/e3sm. runuser, not sudo: gcc-toolset's sudo wrapper drops the PATH. The
+        # first line with a version number, since codex warns about that HOME first.
+        user=${E3SM_USER:-e3sm}
+        bin=/home/$user/.local/bin
+        home=$(runuser -u "$user" -- mktemp -d)
+        for agent in claude codex copilot; do
+            if [ -x "$bin/$agent" ]; then
+                printf '%s: %s\n' "$agent" "$(runuser -u "$user" -- env HOME="$home" PATH="$bin:$PATH" \
+                    "$agent" --version 2>&1 | grep -m1 -E '[0-9]+\.[0-9]+' || echo unknown)"
+            else
+                printf '%s: absent\n' "$agent"
+            fi
+        done
+        rm -rf "$home"
+    fi
+} > "$out/tools.txt"
+
+# Every file must have content; an empty one means its command failed above
+for f in "$out"/*; do
+    test -s "$f" || { echo "e3sm-inventory: $f is empty" >&2; exit 1; }
+done
