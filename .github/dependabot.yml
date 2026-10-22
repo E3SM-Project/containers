@@ -4,3 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The base image digest pinned in ghci/env/Dockerfile. The dev Dockerfile's FROM is our own
+  # env image, by build arg, so there is nothing there for Dependabot to bump.
+  - package-ecosystem: docker
+    directory: /ghci/env
+    schedule:
+      interval: weekly

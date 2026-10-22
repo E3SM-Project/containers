@@ -63,7 +63,8 @@ CPU (AVX2: Intel Haswell / AMD Excavator or newer), the target the binary cache 
 
 Tags name the compiler and MPI by major version (`gnu13-openmpi4`), plus the accelerator
 when there is one (`-cuda`); no accelerator means a host-only stack. The exact versions are
-in `/etc/e3sm/image.env` inside the image.
+in `/etc/e3sm/image.env` inside the image, and everything installed is listed in
+`/etc/e3sm/inventory` (see [Size reports and runtime checks](#size-reports-and-runtime-checks)).
 
 | Tag                  | Arches          | Compiler      | MPI          | Notes |
 |----------------------|-----------------|---------------|--------------|-------|
@@ -405,6 +406,11 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 matrix in `.github/workflows/ghci.yaml` (defined once there; the other jobs reuse it). `ghci/dev/Dockerfile` is likewise one recipe for
 all the `-dev` images, built `FROM` the env tag.
 
+**The base image** is UBI 9 minimal, pinned in `ghci/env/Dockerfile` by its multi-arch
+digest, so rebuilding a commit starts from the same base. When Red Hat publishes a new
+`latest`, Dependabot opens a PR that bumps the digest; CI builds and tests it like any other
+change, and merging it is how a base update reaches the images.
+
 The env Dockerfile is ordered from most to least shared: system packages and spack first
 (no build args involved, so every variant on a runner reuses those layers), then the
 compiler, then the spack stack in chunks, then the python venv.
@@ -475,6 +481,21 @@ same checks plus their own (`ghci/tests/smoke-dev.sh`): the dev tools and agents
 and the ownership of the dirs a dev container mounts onto. Each smoke job uploads an
 `image-size-<tag>-<arch>` artifact with exact bytes, image ID, and layer commands, and the
 run's summary page has one table of every image's compressed and expanded size.
+
+Every image also carries an inventory of what it contains, in `/etc/e3sm/inventory`, written
+by `ghci/env/e3sm-inventory` at the end of the build (and again by the `-dev` build, for what
+it adds): the base image's build (`base.json`), every RPM (`rpm.txt`), spack package with its
+hash and variants (`spack.txt`) and venv package (`pip.txt`), and the compiler, MPI and tool
+versions (`tools.txt`). Each smoke job uploads it as an `inventory-<tag>-<arch>` artifact,
+with the base digest the image was built from (`base-ref.txt`). To see what changed between
+two builds, download both and `diff -r` them; for images you already have:
+
+```bash
+for t in OLD NEW; do
+  id=$(docker create "ghcr.io/e3sm-project/e3sm-image:$t"); docker cp "$id:/etc/e3sm/inventory" "inv-$t"; docker rm "$id"
+done
+diff -r inv-OLD inv-NEW
+```
 
 `ghci/tests/dev-container.sh` holds the `-dev` image checks that need root to set up (git
 in a checkout owned by another uid, a Dev Containers uid remap). CI does not smoke-test
