@@ -111,6 +111,13 @@ RUN echo 'if [[ $- == *i* ]]; then' > /etc/profile.d/eamxx-env.sh && \
     echo '  bind "\"\\e[B\": history-search-forward"' >> /etc/profile.d/eamxx-env.sh && \
     echo 'fi' >> /etc/profile.d/eamxx-env.sh
 
+# CIME (and EAMxx's check-input) first probes the inputdata server with `wget --spider` on its
+# root, and reports "Could not connect" if that takes over 60 s. With wget's defaults (15 min
+# read timeout, 20 tries) one stalled connection uses up all 60 s; short timeouts and a few
+# tries let wget recover from it in time. /etc/wgetrc applies to every user.
+RUN printf '%s\n' '' '# E3SM inputdata server (see ghci/env/Dockerfile)' \
+        'timeout = 10' 'tries = 4' 'waitretry = 2' 'retry_connrefused = on' >> /etc/wgetrc
+
 # Do NOT use `git config --system` here: it writes /etc/gitconfig, which is read by every git
 # process in the container, including CI runners, and it breaks actions/checkout
 # (E3SM submodules use git@ URLs; checkout does its own rewrite to https).
