@@ -57,24 +57,28 @@ jobs:
       fail-fast: false
       # ghci.yaml's per-arch variant list, times the cases in e3sm-case.sh, one job each so
       # they run side by side: the coupled MOAB case, the EAMxx (SCREAM) case, and EAMxx's
-      # standalone tests. The CUDA images only build the two cases (hosted runners have no
-      # GPU), so they skip the standalone tests.
+      # standalone tests. The GPU images (CUDA, HIP) only build the two cases (hosted runners
+      # have no GPU), so they skip the standalone tests.
       matrix:
-        env: [gnu13-openmpi4, gnu13-mpich4-cuda, intel2024-openmpi4]
+        env: [gnu13-openmpi4, gnu13-mpich4-cuda, gnu13-mpich4-hip, intel2024-openmpi4]
         arch: [x86_64, aarch64]
         case: [wcycl, aqp, eamxx]
         exclude:
           - env: intel2024-openmpi4
             arch: aarch64
+          - env: gnu13-mpich4-hip
+            arch: aarch64
           - env: gnu13-mpich4-cuda
+            case: eamxx
+          - env: gnu13-mpich4-hip
             case: eamxx
     name: e3sm-case (${{ matrix.env }}, ${{ matrix.arch }}, ${{ matrix.case }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ inputs.suffix }}
-      BUILD_ONLY: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      BUILD_ONLY: ${{ (contains(matrix.env, 'cuda') || contains(matrix.env, 'hip')) && 'yes' || 'no' }}
       CASES: ${{ matrix.case }}
     steps:
-      # Hosted runners start with ~20 GB free; the image (up to ~15 GB expanded for CUDA),
+      # Hosted runners start with ~20 GB free; the image (up to ~15 GB expanded for CUDA, more for ROCm),
       # E3SM with submodules and a case build need more. These are preinstalled SDKs
       # nothing here uses.
       - name: Free disk space

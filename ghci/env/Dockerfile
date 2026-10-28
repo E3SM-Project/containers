@@ -494,8 +494,9 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
 # The compilers and MPI CIME may use are this variant's; the first of each is the default.
 COPY cime/ /projects/e3sm/cime/
 RUN . /etc/profile && \
-    case "${COMPILER}:${WITH_CUDA}" in \
-      gcc:yes) compilers=gnugpu,gnu ;; \
+    case "${COMPILER}:${WITH_CUDA}:${WITH_HIP}" in \
+      gcc:yes:*) compilers=gnugpu,gnu ;; \
+      gcc:*:yes) compilers=gnu-mphipcc,gnu ;; \
       gcc:*) compilers=gnu ;; \
       intel-oneapi-compilers:*) compilers=intel ;; \
       *) echo "no CIME compiler for COMPILER=${COMPILER}" >&2; exit 1 ;; \

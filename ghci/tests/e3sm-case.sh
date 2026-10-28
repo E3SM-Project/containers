@@ -13,7 +13,7 @@
 #
 # CASES picks what runs, any of: wcycl (the coupled MOAB case), aqp (the EAMxx case), eamxx
 # (EAMxx's standalone tests); all three by default. CI runs one per job, side by side.
-# Missing inputdata is downloaded into the inputdata mount. BUILD_ONLY=yes (the CUDA images:
+# Missing inputdata is downloaded into the inputdata mount. BUILD_ONLY=yes (the CUDA and HIP images:
 # CI has no GPU) builds the cases without running them, and skips the EAMxx standalone tests.
 # The checkout and both mounts must be writable by the e3sm user (uid 1000).
 #
