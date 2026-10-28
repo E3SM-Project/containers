@@ -315,8 +315,9 @@ cd /projects/e3sm/work/E3SM/cime/scripts
 ./create_newcase --case ~/e3sm_scratch/mycase --compset F2010 --res ne4pg2_oQU480
 ```
 
-- **Which compiler and MPI**: the image's own; a CUDA image defaults to `gnugpu` and can
-  also build for the CPU with `--compiler gnu`. `query_config --machines e3sm-container`
+- **Which compiler and MPI**: the image's own; a CUDA image defaults to `gnugpu` and the HIP
+  image to `gnu-mphipcc` (GNU Fortran and C, `hipcc` for C++, as E3SM's `craygnu-mphipcc` on
+  Frontier), and both can also build for the CPU with `--compiler gnu`. `query_config --machines e3sm-container`
   lists them. (`query_config --machines current` guesses from the hostname instead, and a
   docker hostname matches E3SM's `ghci`.)
 - **Where things go**: inputdata in `/projects/e3sm/data/inputdata` (mount it; CIME downloads
@@ -328,10 +329,9 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
 - **GPU arch**: the CUDA images build for Hopper (`HOPPER90`) unless `E3SM_KOKKOS_CUDA_ARCH`
   names another Kokkos arch, e.g. `AMPERE80`.
-- **HIP**: the HIP image's CIME machine offers the CPU `gnu` compiler only; there is no
-  `gnugpu`-like HIP compiler for CIME yet. EAMxx standalone is set up for HIP: Kokkos
-  builds for `AMD_GFX90A` (MI200) unless `E3SM_KOKKOS_HIP_ARCH` names another Kokkos arch,
-  e.g. `AMD_GFX942`, and `mpicxx` is told to compile with `hipcc`.
+- **HIP arch**: the HIP image builds for MI200 (`AMD_GFX90A`, hipcc target `gfx90a`) unless
+  `E3SM_KOKKOS_HIP_ARCH` names another Kokkos arch, e.g. `AMD_GFX942`, in CIME and in EAMxx
+  standalone alike. `mpicxx` is told to compile with `hipcc` (`MPICH_CXX`).
 - **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx` uses the same machine
   (`~/.cime/scream_mach_specs.py`), through `SCREAM_MACHINE` once opted in, or with
   `-m e3sm-container`.
@@ -344,8 +344,8 @@ weekly against the published images and E3SM master, on PRs that change the mach
 by hand against any image suffix and E3SM branch, tag or sha. Each image runs three jobs
 side by side: `SMS_Vmoab_P8_Ln5.ne4pg2_oQU480.WCYCL2010NS`,
 `SMS_P8_Ln5.ne4_ne4.F2000-SCREAMv1-AQP1` (`eamxx-L72` testmod), and the EAMxx standalone
-tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does). The CUDA images only build
-the two cases (CI has no GPU). Each job's summary names the E3SM commit and image digest it
+tests (`-t sp`, or `-t opt` with intel, as E3SM's own CI does). The CUDA and HIP images only
+build the two cases (CI has no GPU). Each job's summary names the E3SM commit and image digest it
 tested. To run it locally against your own checkout, see the script's header (`CASES`
 picks a subset).
 
