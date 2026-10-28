@@ -39,6 +39,24 @@ if (_e3sm_image_env MATCHES "E3SM_WITH_CUDA=yes")
   set(Kokkos_ARCH_${_e3sm_cuda_arch} TRUE CACHE BOOL "")
   option(SCREAM_MPI_ON_DEVICE "Whether to use device pointers for MPI calls" OFF)
   set(SCREAM_TEST_MAX_RANKS 2 CACHE STRING "Upper limit on ranks for mpi tests")
+elseif (_e3sm_image_env MATCHES "E3SM_WITH_HIP=yes")
+  # The image's MPI wrapper compiles with hipcc (scream_mach_specs.py sets MPICH_CXX). The GPU
+  # is not known when the image is built either; it defaults to MI200 (gfx90a), and
+  # E3SM_KOKKOS_HIP_ARCH overrides it, e.g. AMD_GFX942 (any Kokkos_ARCH_<name>).
+  if (DEFINED ENV{E3SM_KOKKOS_HIP_ARCH})
+    set(_e3sm_hip_arch "$ENV{E3SM_KOKKOS_HIP_ARCH}")
+  else()
+    set(_e3sm_hip_arch "AMD_GFX90A")
+  endif()
+  # EAMxx also enables CMake's native HIP language, which cannot detect an arch without a GPU
+  # (CI has none): give it the target the Kokkos arch name stands for (AMD_GFX90A -> gfx90a).
+  string(REGEX REPLACE "^AMD_" "" _e3sm_hip_target "${_e3sm_hip_arch}")
+  string(TOLOWER "${_e3sm_hip_target}" _e3sm_hip_target)
+  set(CMAKE_HIP_ARCHITECTURES "${_e3sm_hip_target}" CACHE STRING "")
+  set(Kokkos_ENABLE_HIP TRUE CACHE BOOL "")
+  set(Kokkos_ARCH_${_e3sm_hip_arch} TRUE CACHE BOOL "")
+  option(SCREAM_MPI_ON_DEVICE "Whether to use device pointers for MPI calls" OFF)
+  set(SCREAM_TEST_MAX_RANKS 2 CACHE STRING "Upper limit on ranks for mpi tests")
 else()
   set(Kokkos_ENABLE_OPENMP TRUE CACHE BOOL "")
   # Keep the threaded tests small enough for a laptop or a 4-core CI runner

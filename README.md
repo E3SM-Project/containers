@@ -15,6 +15,7 @@ All are `ghcr.io/e3sm-project/e3sm-image:<tag>`, one multi-arch tag per image:
 |----------------------|-----------------|-------------------------------|------------|
 | `gnu13-openmpi4`     | x86_64, aarch64 | GCC 13, Open MPI 4            | CPU builds and tests; the default choice, including on Apple Silicon |
 | `gnu13-mpich4-cuda`  | x86_64, aarch64 | GCC 13, MPICH 4, CUDA         | NVIDIA GPU builds (CUDA 12.4 on x86_64, 13.0 on aarch64) |
+| `gnu13-mpich4-hip`   | x86_64          | GCC 13, MPICH 4, ROCm 6.4     | AMD GPU builds, targeting Instinct MI200 (gfx90a) |
 | `intel2024-openmpi4` | x86_64          | oneAPI 2024.1, Open MPI 4, MKL | CPU builds with the Intel compilers |
 | `<tag>-dev`          | as above        | as above                      | Working inside the container: debuggers, ninja, ccache, coding agents |
 
@@ -26,7 +27,8 @@ podman run --rm -it ghcr.io/e3sm-project/e3sm-image:gnu13-openmpi4
   newer). The aarch64 images are generic.
 - **GPU:** the CUDA images carry the CUDA toolkit, not the driver; that comes from the host.
   CUDA 12.4 needs driver 550 or newer (525 with CUDA minor-version compatibility), CUDA 13.0
-  needs 580 or newer.
+  needs 580 or newer. The HIP image carries ROCm 6.4, not the `amdgpu` kernel driver, which
+  must come from the host (and expose `/dev/kfd` and `/dev/dri` to the container).
 
 How to run them (podman, docker, Apptainer, Dev Containers), what is in them, and how they
 are built: [`ghci/README.md`](ghci/README.md).
@@ -35,7 +37,7 @@ are built: [`ghci/README.md`](ghci/README.md).
 
 | Directory                                        | Image                                                  | What it is |
 |--------------------------------------------------|--------------------------------------------------------|------------|
-| [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-image`                      | Spack/UBI9 development and testing environments (`gnu13-openmpi4`, `gnu13-mpich4-cuda`, `intel2024-openmpi4`, and a `-dev` variant of each). **Start here.** |
+| [`ghci/`](ghci/)                                 | `ghcr.io/e3sm-project/e3sm-image`                      | Spack/UBI9 development and testing environments (`gnu13-openmpi4`, `gnu13-mpich4-cuda`, `gnu13-mpich4-hip`, `intel2024-openmpi4`, and a `-dev` variant of each). **Start here.** |
 
 ## Conventions
 
