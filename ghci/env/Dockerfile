@@ -246,6 +246,8 @@ RUN . /etc/profile && on="%${COMPILER_SPEC}" && \
 ARG MPI_SPEC=openmpi@4.1.4
 ARG WITH_DEBUG_TOOLS=yes
 ARG WITH_CUDA=no
+ARG WITH_HIP=no
+ARG ROCM_VERSION=6.4.2
 ARG WITH_MOAB=yes
 ARG WITH_PARMETIS=yes
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
@@ -258,8 +260,18 @@ ARG TORCH_SPEC=torch
 # NOTE: these are exported as E3SM_* rather than reusing the TORCH_*/CUPY_* names. A name
 # that is also an ARG gets substituted by Docker into the instruction text before the shell
 # ever runs, so an export of the same name is silently ignored.
+# HIP is x86_64 only, and its GPU stack (ROCm, ROCm Torch) comes from AMD's repo and PyTorch's
+# rocm index, with no cupy equivalent.
 RUN . /etc/profile && mkdir -p /etc/e3sm && \
-    if [ "${WITH_CUDA}" != "yes" ]; then \
+    if [ "${WITH_CUDA}" = "yes" ] && [ "${WITH_HIP}" = "yes" ]; then \
+      echo "WITH_CUDA and WITH_HIP are exclusive" >&2; exit 1; \
+    elif [ "${WITH_HIP}" = "yes" ]; then \
+      [ "$(uname -m)" = "x86_64" ] || { echo "WITH_HIP=yes is x86_64 only" >&2; exit 1; }; \
+      { echo "export CUDA_FROM_SPACK=no"; \
+        echo "export E3SM_CUPY_PKG="; \
+        echo "export E3SM_TORCH_INDEX=https://download.pytorch.org/whl/rocm${ROCM_VERSION%.*}"; \
+        echo "export E3SM_TORCH_SPEC=torch==2.8.0+rocm${ROCM_VERSION%.*}"; } > /etc/e3sm/cuda-flavor.sh; \
+    elif [ "${WITH_CUDA}" != "yes" ]; then \
       { echo "export CUDA_FROM_SPACK=no"; \
         echo "export E3SM_CUPY_PKG="; \
         echo "export E3SM_TORCH_INDEX=${TORCH_INDEX}"; \
@@ -297,6 +309,55 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
       env -u LD_LIBRARY_PATH microdnf install -y cuda-compiler-13-0 cuda-libraries-13-0 cuda-libraries-devel-13-0 && \
       microdnf clean all && \
       rm -rf /var/cache/dnf; \
+    fi
+
+# 11b. ROCm, for HIP. Installed from AMD's RHEL 9 repo (the one amdgpu-install sets up), not
+# built by spack: llvm-amdgpu alone is a multi-hour build. Compiler, runtime and the
+# header-only libraries Kokkos's HIP backend needs (rocPRIM, rocThrust, hipCUB), not the
+# "rocm" meta-package, which brings GUI-less-image-hostile profilers and every math library.
+# The amdgpu repo (also what amdgpu-install sets up) is only for libdrm-amdgpu-devel, which
+# hsa-rocr-devel needs and UBI lacks; its URL has the RHEL minor in it, so look for one it has.
+# The kernel driver (amdgpu) is the host's business, as with CUDA. Same rpm/microdnf caveats
+# as for CUDA above.
+# amdclang finds libstdc++ only under /usr/lib/gcc, and ours is in gcc-toolset, so point it
+# there (HIPCC_*_FLAGS_APPEND are read by hipcc; HIPFLAGS is what CMake's own HIP language,
+# which runs ROCm's clang directly and which E3SM and EAMxx use, starts from). The environment goes in /etc/e3sm/rocm-env.sh
+# and into the login profile at the end, so that the spack builds below do not see it
+# (/opt/rocm/lib on LD_LIBRARY_PATH would shadow the stack's own libraries).
+RUN . /etc/profile && \
+    if [ "${WITH_HIP}" != "yes" ]; then \
+      echo "skipping HIP"; \
+    else \
+      printf '%s\n' '[rocm]' "name=ROCm ${ROCM_VERSION}" \
+          "baseurl=https://repo.radeon.com/rocm/el9/${ROCM_VERSION}/main" \
+          'enabled=1' 'gpgcheck=1' 'priority=50' \
+          'gpgkey=https://repo.radeon.com/rocm/rocm.gpg.key' > /etc/yum.repos.d/rocm.repo && \
+      for minor in 7 6 5 4 3; do \
+        base="https://repo.radeon.com/amdgpu/${ROCM_VERSION}/el/9.${minor}/main/x86_64"; \
+        curl -fsI "${base}/repodata/repomd.xml" > /dev/null 2>&1 && break; \
+        base=; \
+      done && \
+      [ -n "${base}" ] || { echo "no amdgpu repo for ROCm ${ROCM_VERSION} on EL9" >&2; exit 1; } && \
+      printf '%s\n' '[amdgpu]' "name=AMDGPU ${ROCM_VERSION}" "baseurl=${base}" \
+          'enabled=1' 'gpgcheck=1' 'priority=50' \
+          'gpgkey=https://repo.radeon.com/rocm/rocm.gpg.key' > /etc/yum.repos.d/amdgpu.repo && \
+      curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key -o /tmp/rocm.gpg && \
+      env -u LD_LIBRARY_PATH rpm --import /tmp/rocm.gpg && \
+      rm -f /tmp/rocm.gpg && \
+      env -u LD_LIBRARY_PATH microdnf -y --enablerepo=epel --enablerepo=ubi-9-codeready-builder-rpms install \
+          rocm-hip-runtime-devel rocprim-devel rocthrust-devel hipcub-devel rocminfo rocm-smi-lib && \
+      microdnf clean all && \
+      rm -rf /var/cache/dnf && \
+      test -x /opt/rocm/bin/hipcc && \
+      gcc_dir="$(dirname "$(gcc -print-libgcc-file-name)")" && \
+      { echo 'export ROCM_PATH=/opt/rocm'; \
+        echo 'export HIP_PLATFORM=amd'; \
+        echo 'export PATH=$ROCM_PATH/bin:$PATH'; \
+        echo 'export CMAKE_PREFIX_PATH=$ROCM_PATH${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}'; \
+        echo 'export LD_LIBRARY_PATH=$ROCM_PATH/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}'; \
+        echo "export HIPCC_COMPILE_FLAGS_APPEND=--gcc-install-dir=${gcc_dir}"; \
+        echo "export HIPCC_LINK_FLAGS_APPEND=--gcc-install-dir=${gcc_dir}"; \
+        echo "export HIPFLAGS=--gcc-install-dir=${gcc_dir}"; } > /etc/e3sm/rocm-env.sh; \
     fi
 
 # 12. MPI
@@ -378,6 +439,10 @@ RUN . /etc/profile && mods() { echo "$*" | sed 's/[@~+%][^ ]*//g'; }; \
       [ "${WITH_PARMETIS}" = yes ] && echo "module load metis parmetis"; \
       true; } >> /etc/profile.d/eamxx-env.sh
 
+# ROCm is plain RPMs, not lmod modules, so its env is added by hand
+RUN . /etc/profile && \
+    if [ "${WITH_HIP}" = "yes" ]; then cat /etc/e3sm/rocm-env.sh >> /etc/profile.d/eamxx-env.sh; fi
+
 # CUDA isn't an lmod module on the NVIDIA-repo path, so export its env by hand there
 RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     if [ "${WITH_CUDA}" != "yes" ]; then \
@@ -413,6 +478,8 @@ RUN . /etc/profile && { echo "E3SM_COMPILER=${COMPILER_SPEC}"; \
       echo "E3SM_MPI=${MPI_SPEC}"; \
       echo "E3SM_LAPACK=${LAPACK_SPEC}"; \
       echo "E3SM_WITH_CUDA=${WITH_CUDA}"; \
+      echo "E3SM_WITH_HIP=${WITH_HIP}"; \
+      echo "E3SM_ROCM=$([ "${WITH_HIP}" = yes ] && echo "${ROCM_VERSION}")"; \
       echo "E3SM_WITH_MOAB=${WITH_MOAB}"; \
       echo "E3SM_WITH_PARMETIS=${WITH_PARMETIS}"; \
       echo "E3SM_WITH_DEBUG_TOOLS=${WITH_DEBUG_TOOLS}"; } > /etc/e3sm/image.env

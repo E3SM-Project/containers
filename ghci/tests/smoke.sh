@@ -119,8 +119,12 @@ if os.environ.get("EXPECT_CUDA") == "no":
 elif os.environ.get("EXPECT_CUDA") == "yes":
     assert torch.version.cuda is not None, "CUDA image contains CPU-only Torch"
     import cupy  # noqa: F401  (importing needs no GPU)
+if os.environ.get("EXPECT_HIP") == "yes":
+    assert torch.version.hip is not None, "HIP image contains Torch without ROCm"
+elif os.environ.get("EXPECT_HIP") == "no":
+    assert torch.version.hip is None, "non-HIP image unexpectedly contains ROCm-enabled Torch"
 print("MPI:", MPI.Get_library_version().splitlines()[0])
-print("Torch:", torch.__version__, "CUDA build:", torch.version.cuda)
+print("Torch:", torch.__version__, "CUDA build:", torch.version.cuda, "HIP build:", torch.version.hip)
 PY
 
 step "MPI: C and Fortran (use mpi, use mpi_f08), 2 ranks"
@@ -422,6 +426,30 @@ __global__ void add(int *x) { x[threadIdx.x] += 1; }
 int main() { return 0; }
 CU
     nvcc kernel.cu -o kernel
+fi
+
+if [ "${EXPECT_HIP:-}" = yes ]; then
+    step "HIP: compile and link a kernel for MI200 (no GPU needed)"
+    test "$E3SM_WITH_HIP" = yes
+    hipcc --version | sed -n 1p
+    # <vector> checks that hipcc finds the gcc-toolset libstdc++ headers; the HIP runtime
+    # is linked but not run, as there is no GPU here
+    cat > kernel.hip <<'HIP'
+#include <hip/hip_runtime.h>
+#include <vector>
+__global__ void add(int *x) { x[threadIdx.x] += 1; }
+int main() { std::vector<int> v(1); return v.size() == 1 ? 0 : 1; }
+HIP
+    hipcc --offload-arch=gfx90a kernel.hip -o kernel-hip
+    # CMake's own HIP language (EAMxx, E3SM) runs ROCm's clang directly, not hipcc, and starts
+    # from HIPFLAGS: it must find the same headers
+    test -n "${HIPFLAGS:-}"
+    amdclang++ -x hip --offload-arch=gfx90a ${HIPFLAGS} -c kernel.hip -o kernel-native.o
+    # the header-only libraries Kokkos's HIP backend uses
+    test -f /opt/rocm/include/rocprim/rocprim.hpp
+    test -f /opt/rocm/include/thrust/sort.h
+    # mpicxx (the MPICH wrapper) can drive hipcc, as the EAMxx machine file arranges
+    MPICH_CXX=hipcc mpicxx --offload-arch=gfx90a -x hip -c kernel.hip -o kernel-mpi.o
 fi
 
 echo "ghci smoke checks passed"

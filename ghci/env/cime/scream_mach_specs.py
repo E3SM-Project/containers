@@ -12,6 +12,10 @@ def _image_has_cuda():
     return IMAGE_ENV.is_file() and "E3SM_WITH_CUDA=yes" in IMAGE_ENV.read_text().split()
 
 
+def _image_has_hip():
+    return IMAGE_ENV.is_file() and "E3SM_WITH_HIP=yes" in IMAGE_ENV.read_text().split()
+
+
 class Local(Machine):
     concrete = True
 
@@ -30,4 +34,15 @@ class Local(Machine):
                 out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
                                      capture_output=True, text=True, check=False).stdout
                 gpus = len(out.splitlines())
+            cls.num_run_res = max(gpus, 1)
+        elif _image_has_hip():
+            cls.gpu_arch = "hip"
+            # mpicxx (MPICH) compiles with hipcc, which Kokkos's HIP backend requires
+            cls.env_setup.append("export MPICH_CXX=hipcc")
+            # One resource per GPU agent rocminfo lists; as with CUDA, none still leaves one.
+            gpus = 0
+            if shutil.which("rocminfo"):
+                out = subprocess.run(["rocminfo"], capture_output=True, text=True, check=False).stdout
+                gpus = sum(1 for line in out.splitlines()
+                           if line.split() == ["Device", "Type:", "GPU"])
             cls.num_run_res = max(gpus, 1)

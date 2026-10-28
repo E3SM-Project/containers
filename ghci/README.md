@@ -62,13 +62,14 @@ name. The Intel images are `x86_64` only, and every `x86_64` image needs an **x8
 CPU (AVX2: Intel Haswell / AMD Excavator or newer), the target the binary cache is built for:
 
 Tags name the compiler and MPI by major version (`gnu13-openmpi4`), plus the accelerator
-when there is one (`-cuda`); no accelerator means a host-only stack. The exact versions are
+when there is one (`-cuda`, `-hip`); no accelerator means a host-only stack. The exact versions are
 in `/etc/e3sm/image.env` inside the image.
 
 | Tag                  | Arches          | Compiler      | MPI          | Notes |
 |----------------------|-----------------|---------------|--------------|-------|
 | `gnu13-openmpi4`     | x86_64, aarch64 | GCC 13        | Open MPI 4   | CPU-only stack; the aarch64 image runs well on Apple Silicon |
 | `gnu13-mpich4-cuda`  | x86_64, aarch64 | GCC 13        | MPICH 4      | CUDA stack: 12.4 on x86_64, 13.0 on aarch64, which targets NVIDIA "superchip" systems such as Grace Hopper/Blackwell |
+| `gnu13-mpich4-hip`   | x86_64          | GCC 13        | MPICH 4      | ROCm 6.4 stack (AMD's RHEL 9 packages) with ROCm Torch, built for Instinct MI200 (gfx90a). x86_64 only: no ARM host has these GPUs |
 | `intel2024-openmpi4` | x86_64          | oneAPI 2024.1 | Open MPI 4   | CPU-only stack (Intel oneAPI is x86_64-only) |
 | `<tag>-dev`          | as above        | as above      | as above     | Any of the above plus developer tooling; see below |
 
@@ -276,6 +277,13 @@ CI has no GPU, and tests only that the CUDA images import and that `nvcc` compil
 kernel. The host driver must be new enough for the image's CUDA (12.4 on x86_64, 13.0 on
 aarch64).
 
+The HIP image likewise carries ROCm (`hipcc`, rocPRIM, rocThrust, hipCUB, `rocminfo`) and
+ROCm Torch, but not the `amdgpu` kernel driver. With docker/podman, pass the devices through:
+`--device /dev/kfd --device /dev/dri --group-add video` (plus `--group-add render` where the
+render node needs it); Apptainer's `--rocm` does it for you. CI has no AMD GPU either, and
+tests only that the Torch build is ROCm's and that `hipcc` compiles and links a kernel for
+`gfx90a`. This is also **not qualified on a GPU** yet.
+
 ## Important storage & permission guidelines
 
 - **Input data** (`inputdata`): mount it at `/projects/e3sm/data/inputdata`. The `e3sm`
@@ -320,6 +328,10 @@ cd /projects/e3sm/work/E3SM/cime/scripts
   Builds use 8 make jobs (`./xmlchange GMAKE_J=N`).
 - **GPU arch**: the CUDA images build for Hopper (`HOPPER90`) unless `E3SM_KOKKOS_CUDA_ARCH`
   names another Kokkos arch, e.g. `AMPERE80`.
+- **HIP**: the HIP image's CIME machine offers the CPU `gnu` compiler only; there is no
+  `gnugpu`-like HIP compiler for CIME yet. EAMxx standalone is set up for HIP: Kokkos
+  builds for `AMD_GFX90A` (MI200) unless `E3SM_KOKKOS_HIP_ARCH` names another Kokkos arch,
+  e.g. `AMD_GFX942`, and `mpicxx` is told to compile with `hipcc`.
 - **EAMxx standalone**: `components/eamxx/scripts/test-all-eamxx` uses the same machine
   (`~/.cime/scream_mach_specs.py`), through `SCREAM_MACHINE` once opted in, or with
   `-m e3sm-container`.
@@ -395,6 +407,8 @@ The args (see the top of each section in `ghci/env/Dockerfile`, and the `env` ma
 | `LAPACK_SPEC`      | `openblas`                   | e.g. `netlib-lapack`, `intel-oneapi-mkl` |
 | `WITH_DEBUG_TOOLS` | `yes`                        | gdb and valgrind, from RHEL |
 | `WITH_CUDA`        | `no`                         | |
+| `WITH_HIP`         | `no`                         | ROCm and ROCm Torch, x86_64 only; exclusive with `WITH_CUDA` |
+| `ROCM_VERSION`     | `6.4.2`                      | ROCm release, from `repo.radeon.com/rocm/el9/<version>`; also picks the Torch wheel index (`rocm6.4`) |
 | `WITH_MOAB`        | `yes`                        | MOAB 5.6.0 (with TempestRemap) from spack; its module exports `MOAB_ROOT` |
 | `WITH_PARMETIS`    | `yes`                        | static Metis 5.1.0 and ParMETIS 4.0.3 (64-bit indices and reals) from spack, for Omega; their modules export `METIS_ROOT` and `PARMETIS_ROOT` |
 

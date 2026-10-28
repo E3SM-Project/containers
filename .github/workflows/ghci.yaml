@@ -280,6 +280,20 @@ jobs:
               WITH_CUDA=yes
               WITH_MOAB=yes
               WITH_PARMETIS=yes
+          # ROCm 6.4 from AMD's RHEL 9 repo, built for Instinct MI200 (gfx90a); x86_64 only
+          - env: gnu13-mpich4-hip
+            arches: '["x86_64"]'
+            args: |
+              COMPILER=gcc
+              GCC_TOOLSET=13
+              MPI_SPEC=mpich@4.1.1
+              LAPACK_SPEC=openblas
+              WITH_DEBUG_TOOLS=no
+              WITH_CUDA=no
+              WITH_HIP=yes
+              ROCM_VERSION=6.4.2
+              WITH_MOAB=yes
+              WITH_PARMETIS=yes
           # Intel oneAPI ships for x86_64 only
           - env: intel2024-openmpi4
             arches: '["x86_64"]'
@@ -302,6 +316,7 @@ jobs:
       tag_suffix: ${{ needs.suffix.outputs.value }}
       cache_suffix: ${{ needs.suffix.outputs.cache }}
       no_cache: ${{ needs.suffix.outputs.fresh == 'true' }}
+      free_disk: ${{ contains(matrix.env, 'hip') }}
       build_args: ${{ matrix.args }}
 
   # Builds FROM this run's env image, or, when this change leaves env alone (`env` skipped),
@@ -351,15 +366,18 @@ jobs:
       # Every variant from `env` on each of its arches: reused by every per-arch job
       # (`*per_arch`). Keep the exclusions in step with the `arches` in the variant list.
       matrix: &per_arch
-        env: [gnu13-openmpi4, gnu13-mpich4-cuda, intel2024-openmpi4]
+        env: [gnu13-openmpi4, gnu13-mpich4-cuda, gnu13-mpich4-hip, intel2024-openmpi4]
         arch: [x86_64, aarch64]
         exclude:
           - env: intel2024-openmpi4
+            arch: aarch64
+          - env: gnu13-mpich4-hip
             arch: aarch64
     name: smoke (${{ matrix.env }}, ${{ matrix.arch }})
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      EXPECT_HIP: ${{ contains(matrix.env, 'hip') && 'yes' || 'no' }}
       VARIANT: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
@@ -376,7 +394,7 @@ jobs:
           python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
       - name: Test login environment, Python, NetCDF, and MPI
         run: |
-          docker run --rm -e EXPECT_CUDA \
+          docker run --rm -e EXPECT_CUDA -e EXPECT_HIP \
             -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
             "$IMAGE" bash -l /opt/ghci-tests/smoke.sh
       # As a uid the image doesn't know, the way a CI job runs it with `--user`: HOME must
@@ -425,6 +443,7 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/e3sm-image:${{ matrix.env }}-dev${{ needs.suffix.outputs.value }}
       EXPECT_CUDA: ${{ contains(matrix.env, 'cuda') && 'yes' || 'no' }}
+      EXPECT_HIP: ${{ contains(matrix.env, 'hip') && 'yes' || 'no' }}
       VARIANT: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
@@ -441,7 +460,7 @@ jobs:
           python3 scripts/image-size.py "${IMAGE,,}" >> "$GITHUB_STEP_SUMMARY"
       - name: Test the env through the dev layer, and the dev tools
         run: |
-          docker run --rm -e EXPECT_CUDA \
+          docker run --rm -e EXPECT_CUDA -e EXPECT_HIP \
             -v "$PWD/ghci/tests:/opt/ghci-tests:ro" \
             "$IMAGE" bash -l /opt/ghci-tests/smoke-dev.sh
       - uses: actions/upload-artifact@v7
