@@ -532,7 +532,8 @@ RUN . /etc/profile && . /etc/e3sm/cuda-flavor.sh && \
     if [ -n "${E3SM_CUPY_PKG}" ]; then \
       python3 -m pip install --no-cache-dir --only-binary=:all: "${E3SM_CUPY_PKG}"; \
     fi && \
-    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}"
+    python3 -m pip install --no-cache-dir --extra-index-url "${E3SM_TORCH_INDEX}" "${E3SM_TORCH_SPEC}" && \
+    chmod -R a+rwX /projects/e3sm/software/eamxx-venv
 
 WORKDIR /home/${E3SM_USER}
 
