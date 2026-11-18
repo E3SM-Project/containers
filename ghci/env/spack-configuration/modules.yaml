@@ -29,13 +29,15 @@ modules:
       # them through RPATH, and a loaded module would put e.g. spack's ncurses on
       # LD_LIBRARY_PATH ahead of the system one, which crashes system tools such as `watch`.
       exclude_implicits: true
-      # The exceptions: implicit packages whose library path is still needed at link time (see
-      # LIBRARY_PATH above: MOAB's flags have a bare -lz, from hdf5's zlib). Hidden, as they
-      # are implicit.
+      # The exceptions: implicit packages that something links against through MOAB's flags
+      # (MOAB_PACKAGE_LIBS), which has a bare -lz (hdf5's zlib) and the -l of its own
+      # dependencies, with a -L but no rpath. Hidden, as they are implicit.
       hide_implicits: true
       include:
         - zlib-ng
         - zlib
+        - tempestremap
+        - zoltan
       # oneAPI's module would otherwise load the gcc it depends on, which is also in the
       # "compiler" family, and Lmod (9.4 on) then swaps oneAPI out for it: nothing below the
       # compiler in the hierarchy loads. gcc comes from gcc-toolset at login anyway.
