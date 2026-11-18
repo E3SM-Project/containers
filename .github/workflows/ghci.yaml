@@ -502,7 +502,9 @@ jobs:
   apptainer:
     needs: [suffix, env]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: the apptainer .deb below depends on libfuse3-3, which newer Ubuntu
+    # releases no longer provide, so it cannot be installed there.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read

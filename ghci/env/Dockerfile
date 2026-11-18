@@ -395,7 +395,7 @@ RUN . /etc/profile && if [ "${WITH_MOAB}" = "yes" ]; then \
 # Metis and ParMETIS, for Omega. The specs are the ones Polaris deploys for Omega on the
 # supported machines (64-bit indices and reals), static because Omega's FindParmetis.cmake
 # looks for libmetis.a and libparmetis.a only. Both are roots, so both get a module (implicit
-# packages' are hidden); the modules export METIS_ROOT and PARMETIS_ROOT, which Omega takes
+# packages get none); the modules export METIS_ROOT and PARMETIS_ROOT, which Omega takes
 # as -DOMEGA_METIS_ROOT and -DOMEGA_PARMETIS_ROOT.
 # Both ask for cmake_minimum_required(2.8), which CMake 4 refuses unless told the minimum
 # policy version to use instead; spack's recipes do not, so it is set for this install.
